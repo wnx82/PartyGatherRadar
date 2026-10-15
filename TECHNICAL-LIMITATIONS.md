@@ -33,9 +33,9 @@ PartyGatherRadar identifie Forever par le numéro d'interface (16000 à 19999) e
 | Capacité | Verdict | Mécanisme retenu | Confiance |
 |---|---|---|---|
 | **A. Énumérer les points de pistage de la minicarte** | **Impossible** | Aucune API : les 23 fonctions `C_Minimap` n'en listent aucun ; l'événement `MINIMAP_UPDATE_TOOLTIP` n'existe pas | Confirmé (doc) |
-| **A. Lire le nom d'un point sous un survol** | Possible | `C_TooltipInfo.GetMinimapMouseover()` (données de l'infobulle native) | Confirmé (doc) ; non vérifié en jeu |
-| **A. Sonder la minicarte sans bouger la souris** | Possible, **expérimental** | `Minimap:SetUsingSoftCursor(bool)` + `Minimap:UpdateMouseoverAtPoint(x, y)` : fonctions **propres à la branche Forever** | Confirmé (doc) ; utilisé par NodeSight ; non vérifié en jeu |
-| A. Position d'un point détecté | Approximative | Grille de sondage → décalage en unités de minicarte → mètres (`C_Minimap.GetViewRadius`) → coordonnées de carte | Calcul testé hors jeu ; non vérifié en jeu |
+| **A. Lire le nom d'un point sous un survol** | Possible | `C_TooltipInfo.GetMinimapMouseover()` (données de l'infobulle native) | Confirmé (doc) ; **vérifié en jeu** par le balayage (2026-10-15) |
+| **A. Sonder la minicarte sans bouger la souris** | Possible, **expérimental** | `Minimap:SetUsingSoftCursor(bool)` + `Minimap:UpdateMouseoverAtPoint(x, y)` : fonctions **propres à la branche Forever** | Confirmé (doc) ; utilisé par NodeSight ; **vérifié en jeu** (2026-10-15, 293 points sans erreur) ; clignotement de l'infobulle non vérifié |
+| A. Position d'un point détecté | Approximative | Grille de sondage → décalage en unités de minicarte → mètres (`C_Minimap.GetViewRadius`) → coordonnées de carte | Calcul testé hors jeu ; en jeu, joueurs retrouvés à 0,3 m et 8 m (près du centre) ; échelle à distance non vérifiée |
 | A. Identifiant de ressource | Indisponible | L'infobulle ne donne que des noms localisés | Confirmé (doc : données d'infobulle) |
 | A. Type herbe / minerai | Indirect | Déductible du pistage actif ou d'une table de noms (phase 2) | Analyse |
 | A. Disparition d'une ressource | Partielle | Absence lors d'un nouveau balayage *dans le rayon* = incertaine ; récolte par le joueur détectable (`UNIT_SPELLCAST_SENT`, butin) | Analyse ; cible du sort potentiellement secrète |
@@ -79,7 +79,14 @@ développé en phase 2/3, clairement séparé des détections actives.
   ressources très proches peuvent fusionner en un seul repère.
 - **Données de l'infobulle** : une ligne peut contenir plusieurs noms séparés par des retours à la
   ligne, avec des codes de couleur (le gris signalerait une grotte) et des flèches d'altitude : non
-  exploités en 0.1.0.
+  exploités en 0.1.1.
+- **Constaté en jeu** (2026-10-15, Les Tarides, zoom 0) : l'infobulle ne contient pas que des
+  ressources. Elle renvoie aussi les **zones d'objectif de quête** (titre « Les échantillons de racines »
+  et ligne d'objectif « - Echantillon de racines : 0/8 », sur presque toute la minicarte), ainsi que le
+  joueur et les membres du groupe (« Aekiss Desbisous », « Aedot Wnx »). Sur 131 repères : 2 plantes
+  (« Pacifique », « Eglantine », noms français du client, sans accent), 124 de quête, 5 de joueurs. Une
+  plante touche environ 6 points de grille : la zone de survol d'un point est large. La détection doit
+  donc trier les noms (phase 2).
 - **Valeurs secrètes** : la documentation ne marque pas `GetMinimapMouseover` comme secret ; chaque
   lecture est néanmoins protégée par `issecretvalue`.
 

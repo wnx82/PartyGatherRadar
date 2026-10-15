@@ -64,9 +64,9 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | `/pgr diag` | Aucune `ERREUR` ; `detection.minimapProbeApi` = ATTENTION (disponible) ; localisation fiable = OUI en extérieur | **OK** (2026-10-15, les deux) ; `GetMinimapShape` ABSENT (normal sans addon de minicarte), `comm.realmRestricted` = true alors que les messages passent |
 | `/pgr diag` : ligne `identity.player` | Identité « Prénom Nom » (ex. « Aedot Wnx »), noms régionaux : true ; rapport copié dans `diagnostics.lastReport` après `/reload` | **OK** (2026-10-15) : « Aedot Wnx », « Aekiss Desbisous » ; `UnitFullName` et `UnitNameUnmodified` renvoient tous deux (prénom, nom de famille) |
 | Aekiss : `/pgr probe tracking` | Découverte d'herbes listée (active ou non) | **OK** (2026-10-15, via `tracking.types` de `/pgr diag`) : 24 types, herbes actif |
-| Aekiss, pistage herbes actif, `/pgr probe minimap` puis survol d'un point | Nom de la plante affiché, position plausible | Non exécuté |
-| Aekiss : `/pgr probe scan` hors combat, souris hors de la minicarte | Marqueurs « [Sonde] … » **superposés** aux points natifs (capture d'écran), aucun clignotement d'infobulle | Non exécuté |
-| Idem, minicarte zoomée au maximum puis au minimum | Superposition conservée ; précision meilleure au zoom maximal | Non exécuté |
+| Aekiss, pistage herbes actif, `/pgr probe minimap` puis survol d'un point | Nom de la plante affiché, position plausible | Non rapporté |
+| Aekiss : `/pgr probe scan` hors combat, souris hors de la minicarte | Marqueurs « [Sonde] … » **superposés** aux points natifs (capture d'écran), aucun clignotement d'infobulle | **Partiel** (2026-10-15, Les Tarides, zoom 0) : 293 points, 131 repères, aucune erreur ; herbes lues (« Pacifique », « Eglantine ») ; Aekiss retrouvée à 0,3 m et Aedot à 8 m de leur position réelle ; bruit : 124 repères de zone de quête, 5 de joueurs ; superposition et clignotement non rapportés (pas de capture) |
+| Idem, minicarte zoomée au maximum puis au minimum | Superposition conservée ; précision meilleure au zoom maximal | Non exécuté (second balayage identique au premier : même zoom) |
 | Idem avec `/console rotateMinimap 1` | Superposition conservée, ou marqueurs masqués si l'orientation est inaccessible | Non exécuté |
 | Idem en combat | « balayage impossible : en combat » | Non exécuté |
 | Aedot : `/pgr probe tracking`, `/pgr probe scan` | Pas de pistage d'herbes ; aucune plante trouvée (seuls PNJ/joueurs éventuels) | Partiel (2026-10-15) : herbes non (OK) ; balayage non exécuté |
@@ -78,7 +78,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | Aekiss invite Aedot | Chez chacun : « <autre> utilise PartyGatherRadar 0.1.1 (protocole 1) » en quelques secondes | **OK en 0.1.1** (2026-10-15) : message valide reçu des deux côtés, 0 rejet ; échec en 0.1.0 |
 | `/pgr peers` chez les deux | L'autre listé, compatible, capacités cohérentes | Non rapporté (sortie dans la discussion seulement) |
 | `/pgr status` | B. synchronisation = OUI (message valide reçu) | **OK** (2026-10-15) : OUI chez les deux, via `/pgr diag` |
-| `/pgr test` chez Aekiss | Marqueur TEST local à ~21 m au nord-est ; « PONG reçu de Aedot en N ms » ; marqueur TEST chez Aedot | Partiel (2026-10-15) : PING et NODE TEST envoyés, PONG envoyé par Aedot, NODE TEST reçu chez Aedot ; réception du PONG non journalisée ; affichage non vérifiable (Aedot aux Tarides, Aekiss en Azshara) |
+| `/pgr test` chez Aekiss | Marqueur TEST local à ~21 m au nord-est ; « PONG reçu de Aedot en N ms » ; marqueur TEST chez Aedot | Partiel (2026-10-15) : dans les deux sens (Aekiss puis Aedot), PING et NODE TEST envoyés, NODE TEST reçu et PONG renvoyé par l'autre ; réception du PONG non journalisée |
 
 Essai du 2026-10-15 (0.1.0, journal d'Aedot) : HELLO envoyé, messages d'Aekiss bien reçus, mais rejetés
 (`not_in_group`) ; propre écho non reconnu. Cause : sur Forever, l'émetteur a la forme `Prénom Nom-Royaume`
@@ -93,7 +93,7 @@ reconnus (3 chez Aedot, 4 chez Aekiss), aucune erreur Lua.
 | Étape | Résultat attendu | Statut |
 |---|---|---|
 | Aekiss pistage herbes actif, Aedot sans pistage, `/pgr peers` | Aekiss annonce « herbes », Aedot non | Partiel (2026-10-15) : pistage confirmé par `/pgr diag` ; annonce via `/pgr peers` non rapportée |
-| `/pgr probe scan` chez les deux au même endroit | Plantes trouvées seulement chez Aekiss | Non exécuté |
+| `/pgr probe scan` chez les deux au même endroit | Plantes trouvées seulement chez Aekiss | Partiel (2026-10-15) : plantes trouvées chez Aekiss ; balayage non lancé chez Aedot |
 
 ### Scénario 3 — Transmission d'une plante (phase 3)
 
@@ -102,7 +102,7 @@ Le partage automatique des détections réelles n'existe pas en 0.1.1. Vérifiab
 
 | Étape | Résultat attendu | Statut |
 |---|---|---|
-| Les deux personnages côte à côte, `/pgr test` chez Aekiss | Le marqueur TEST apparaît au même endroit sur les deux minicartes | Non exécuté |
+| Les deux personnages côte à côte, `/pgr test` chez Aekiss | Le marqueur TEST apparaît au même endroit sur les deux minicartes | Partiel (2026-10-15) : côte à côte (4 m), test lancé par Aedot, marqueur reçu par Aekiss ; position à l'écran non rapportée (pas de capture) |
 | Aedot à 50 m d'Aekiss | Le marqueur reste au même endroit du terrain (décalé sur la minicarte d'Aedot) | Non exécuté |
 | Survol du marqueur chez Aedot | Infobulle : Nom, Type Test, Détecté par Aekiss, État TEST, Dernière détection, Distance | Non exécuté |
 
