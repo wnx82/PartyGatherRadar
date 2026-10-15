@@ -4,6 +4,26 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 [SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` (`## Version`) et
 `Core/Init.lua` (`ns.VERSION`).
 
+## [0.2.0] - 2026-10-15
+
+### Ajouté
+
+- Bouton autour de la minicarte (icône de fleur) : clic pour ouvrir la fenêtre de réglages, glisser pour
+  le déplacer sur le bord (minicarte ronde ou carrée), infobulle avec la version et le nombre de membres
+  du groupe qui utilisent l'addon. Masquable (`/pgr button off`), position conservée.
+- Fenêtre de réglages (`/pgr`, `/pgr config`, Échap pour fermer) : version de l'addon, du protocole et du
+  client ; membres du groupe avec leur version de PartyGatherRadar ou « sans addon détecté » ; cases
+  « Activer », « Afficher les infos des autres joueurs », « Partager mes infos », « Afficher les
+  marqueurs sur la minicarte », « Herbes », « Minerais », « Bouton autour de la minicarte »,
+  « Journal de diagnostic » ; boutons « Test de communication » et « Diagnostic ».
+- Réglages `showMinimapButton` et `minimapButtonAngle` (schéma inchangé, valeurs par défaut ajoutées).
+- Tests hors jeu (106) : bouton, position, déplacement, masquage, infobulle, fenêtre, cases, anglais.
+
+### Modifié
+
+- `/pgr` sans argument ouvre la fenêtre de réglages ; la liste des commandes reste dans `/pgr help`.
+- `/pgr peers` liste les membres sans addon à partir de la composition du groupe déjà connue.
+
 ## [0.1.1] - 2026-10-15
 
 Correctif issu du premier essai en jeu à deux clients (journal d'Aedot du 2026-10-15).

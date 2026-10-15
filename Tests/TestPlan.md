@@ -1,4 +1,4 @@
-# Plan de tests — PartyGatherRadar 0.1.1
+# Plan de tests — PartyGatherRadar 0.2.0
 
 Deux niveaux de tests :
 
@@ -32,6 +32,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | Expiration des marqueurs | Récente → incertaine (60 s) → supprimée (300 s), âge transmis, TEST (120 s), historique sans expiration |
 | Messages invalides | Types, tailles, champs, énumérations, noms avec `|`, incohérences TEST, émetteur hors groupe, canaux interdits, valeurs secrètes |
 | Identité des joueurs | Noms régionaux de Forever (« Prénom Nom-Royaume ») : découverte, écho, PING/PONG, homonymes de prénom, départ, normalisation ; mode classique « Nom-Royaume » |
+| Interface | Bouton de minicarte (création, position ronde/carrée, déplacement, masquage conservé), fenêtre de réglages (version, membres avec et sans l'addon, mise à jour au départ du groupe, chaque case modifie son réglage, infos des autres masquées puis réaffichées), anglais |
 | Changements de groupe | Départ d'un membre, dissolution du groupe, BYE, /reload, membre sans addon, raid |
 | Séparation simulé / réel | Magasins séparés, mélanges refusés, pas de fusion TEST/réel, sonde de calibration en TEST uniquement |
 | Robustesse | Module en erreur désactivé seul (rafale de 3 erreurs en 60 s), événement inconnu refusé sans erreur, écouteur retiré pendant la répartition, échec de conversion de carte retenté, toutes les commandes `/pgr`, client anglais |
@@ -44,6 +45,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 |---|---|---|
 | 2026-10-14 | Lua 5.1 embarqué (lupa) | 89 réussis, 0 échec (0.1.0) |
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 97 réussis, 0 échec (0.1.1) |
+| 2026-10-15 | Lua 5.1 embarqué (lupa) | 106 réussis, 0 échec (0.2.0) |
 
 ## 2. Tests en jeu
 
@@ -141,6 +143,17 @@ Le partage automatique des détections réelles n'existe pas en 0.1.1. Vérifiab
 |---|---|---|
 | Aedot désactive l'addon, `/reload`, groupe avec Aekiss | Chez Aekiss : aucun pair, `/pgr peers` liste Aedot « sans addon détecté » | Non exécuté |
 | `/pgr test` chez Aekiss | « aucun PONG reçu en 5 s », aucune erreur | Non exécuté |
+
+### Scénario 9 — Bouton de minicarte et fenêtre de réglages (0.2.0)
+
+| Étape | Résultat attendu | Statut |
+|---|---|---|
+| Connexion | Bouton (icône de fleur) sur le bord de la minicarte, en bas à gauche | Non exécuté |
+| Survol du bouton | Infobulle : « PartyGatherRadar 0.2.0 », membres du groupe et nombre avec l'addon | Non exécuté |
+| Glisser le bouton, `/reload` | Le bouton suit le bord de la minicarte et garde sa place après `/reload` | Non exécuté |
+| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.2.0 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
+| Aedot `/pgr test`, Aekiss décoche « Afficher les infos des autres joueurs » | Le marqueur TEST d'Aedot disparaît de la minicarte d'Aekiss, puis revient quand la case est recochée | Non exécuté |
+| Décocher « Bouton autour de la minicarte » | Bouton masqué ; `/pgr` rouvre la fenêtre ; `/pgr button on` le réaffiche | Non exécuté |
 
 ### Scénarios complémentaires
 

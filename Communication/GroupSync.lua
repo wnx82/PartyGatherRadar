@@ -81,6 +81,16 @@ function GroupSync.GetRosterSize()
 	return count
 end
 
+--- Identités des autres membres du groupe (vous exclu), triées.
+function GroupSync.GetRosterNames()
+	local names = {}
+	for name in pairs(roster) do
+		names[#names + 1] = name
+	end
+	table.sort(names)
+	return names
+end
+
 local function RemovePeer(name, reason)
 	local peer = peers[name]
 	peers[name] = nil

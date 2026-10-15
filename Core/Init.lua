@@ -5,7 +5,7 @@
 local addonName, ns = ...
 
 ns.ADDON_NAME = addonName or "PartyGatherRadar"
-ns.VERSION = "0.1.1"
+ns.VERSION = "0.2.0"
 ns.PREFIX = "PGRadar"            -- préfixe des messages d'addon (16 caractères maximum)
 ns.TARGET_INTERFACE = 16001       -- interface de la bêta WoW Forever ciblée
 ns.TARGET_BUILD = "1.60.1"

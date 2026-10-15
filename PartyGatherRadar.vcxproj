@@ -165,6 +165,8 @@
     <None Include="Communication\Sender.lua" />
     <None Include="Map\MarkerManager.lua" />
     <None Include="Map\MinimapOverlay.lua" />
+    <None Include="UI\MinimapButton.lua" />
+    <None Include="UI\SettingsPanel.lua" />
     <None Include="Tests\Harness.lua" />
     <None Include="Tests\ProtocolTests.lua" />
     <None Include="Tests\SyncSimulationTests.lua" />

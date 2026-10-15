@@ -84,10 +84,8 @@ local function PrintPeers()
 	end
 	-- membres du groupe sans addon détecté (aucun message reçu)
 	local others = {}
-	for i = 1, 40 do
-		local unit = (IsInRaid() and "raid" or "party") .. i
-		local name = ns.UnitFullNameSafe(unit)
-		if name and not known[name] and name ~= ns.GetPlayerFullName() then
+	for _, name in ipairs(ns.GroupSync.GetRosterNames()) do
+		if not known[name] then
 			others[#others + 1] = ns.ShortName(name)
 		end
 	end
@@ -227,10 +225,11 @@ local function Probe(argument)
 end
 
 ---------------------------------------------------------------------------
--- Réglages simples en ligne de commande (la fenêtre de paramètres arrive en phase 4)
+-- Réglages simples en ligne de commande (les mêmes que la fenêtre de réglages, /pgr)
 ---------------------------------------------------------------------------
 
-local TOGGLES = { share = "shareEnabled", receive = "receiveEnabled", minimap = "showMinimap" }
+local TOGGLES = { share = "shareEnabled", receive = "receiveEnabled", minimap = "showMinimap",
+	button = "showMinimapButton" }
 
 local function SetToggle(key, argument)
 	local value
@@ -254,6 +253,10 @@ local HELP_KEYS = {
 	"HELP_DIAG", "HELP_PROBE", "HELP_LOG", "HELP_TOGGLES",
 }
 
+local function OpenSettings()
+	ns.SettingsPanel.Open()
+end
+
 local function PrintHelp()
 	ns.Print(ns.T("HELP_HEADER"))
 	for _, key in ipairs(HELP_KEYS) do
@@ -263,6 +266,8 @@ end
 
 local HANDLERS = {
 	help = PrintHelp,
+	config = OpenSettings,
+	options = OpenSettings,
 	status = PrintStatus,
 	version = PrintVersion,
 	peers = PrintPeers,
@@ -302,8 +307,7 @@ function Commands.Handle(input)
 	input = (input or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
 	local command, argument = input:match("^(%S+)%s*(.-)$")
 	if not command then
-		PrintHelp()
-		ns.Print(ns.T("SETTINGS_WINDOW_LATER"))
+		OpenSettings()
 		return
 	end
 	if TOGGLES[command] then

@@ -138,12 +138,13 @@ développé en phase 2/3, clairement séparé des détections actives.
 - Les icônes peuvent recouvrir des points natifs (quêtes) : taille 14 px et transparence 0,9 par défaut,
   réglables.
 
-## 4. Limitations connues de la version 0.1.1
+## 4. Limitations connues de la version 0.2.0
 
 1. Pas de détection continue : la phase 0 fournit des **sondes** à la demande (`/pgr probe ...`).
 2. Pas de partage automatique de détections réelles : seul `/pgr test` diffuse un marqueur (TEST).
 3. Pas de mode de secours (positions de récolte, marqueurs manuels) : phase 2/3.
-4. Pas de fenêtre de paramètres ni de bouton de minicarte : phase 4 (commandes `/pgr` en attendant).
+4. Fenêtre de réglages simple (cases à cocher) : taille, couleurs et durées seulement dans
+   `PartyGatherRadarDB.settings` (phase 4). Bouton et fenêtre non encore vérifiés en jeu.
 5. Pas d'affichage sur la carte du monde : phase 3.
 6. Formes de minicarte non rondes approximées comme carrées.
 7. Rotation de minicarte : non vérifiée en jeu ; icônes masquées si l'orientation est inaccessible.
