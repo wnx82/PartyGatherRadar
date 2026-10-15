@@ -437,9 +437,9 @@ local function BuildEnvironment(client)
 		return other and other.name or nil
 	end
 	if client.world.regionalNames ~= nil then
-		-- noms régionaux (Forever) : UnitName/UnitNameUnmodified renvoient (prénom, nom de famille), voir NameUtil.lua
-		-- (Camelot) de Blizzard ; world.joinedNames simule l'autre forme ("Prénom Nom", nil). UnitFullName garde le
-		-- comportement classique (prénom, royaume) : son comportement réel sur Forever n'est pas documenté.
+		-- noms régionaux (Forever) : UnitName, UnitNameUnmodified et UnitFullName renvoient (prénom, nom de famille),
+		-- jamais le royaume (vu en jeu le 2026-10-15, voir aussi NameUtil.lua (Camelot) de Blizzard) ;
+		-- world.joinedNames simule l'autre forme ("Prénom Nom", nil) décrite par NameUtil.GetUnitFirstName.
 		local regional = client.world.regionalNames
 		api.RegionalUniqueNamesEnabled = function() return regional end
 		api.Constants = { CharacterNameSeparatorConsts = { CHARACTERNAME_SURNAME_SEPARATOR = " " } }
@@ -462,7 +462,7 @@ local function BuildEnvironment(client)
 		api.UnitName = RegionalName
 		api.UnitNameUnmodified = RegionalName
 	end
-	api.UnitFullName = function(unit)
+	api.UnitFullName = client.world.regionalNames and api.UnitNameUnmodified or function(unit)
 		local target = unit == "player" and client or client:UnitClient(unit)
 		if not target then
 			return nil

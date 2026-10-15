@@ -38,16 +38,16 @@ produit `ABSENT` ou `ERREUR`, jamais une erreur Lua.
 | chemins d'API (`C_ChatInfo.*`, `C_Map.*`, `C_Minimap.*`, `C_TooltipInfo`…) | Présence des fonctions utilisées | OK, sauf éventuellement `C_VignetteInfo.*`, `GetMinimapShape` (fourni par certains addons) |
 | `prefix.registered` | Préfixe `PGRadar` inscrit | OK |
 | `comm.lockdown` | `C_ChatInfo.InChatMessagingLockdown()` | OK (libre) hors rencontre ; à relever en donjon |
-| `comm.realmRestricted` | `AreOutgoingAddonChatMessagesRestricted()` | INFO (peu fiable selon d'autres auteurs) |
+| `comm.realmRestricted` | `AreOutgoingAddonChatMessagesRestricted()` | INFO ; **vu en jeu** : `true` alors que les messages PARTY passent (peu fiable) |
 | `comm.channel` | Canal de groupe choisi | PARTY en groupe, INDISPONIBLE seul |
-| `identity.player` | Identité comparée aux émetteurs, `RegionalUniqueNamesEnabled()`, valeurs brutes de `UnitFullName` et `UnitNameUnmodified` | INFO : sur Forever, identité « Prénom Nom », noms régionaux : true |
+| `identity.player` | Identité comparée aux émetteurs, `RegionalUniqueNamesEnabled()`, valeurs brutes de `UnitFullName` et `UnitNameUnmodified` | INFO ; **vu en jeu** : identité « Prénom Nom », noms régionaux : true, les deux fonctions renvoient (prénom, nom de famille) |
 | `map.player` | Carte et position du joueur | OK en extérieur, INDISPONIBLE (instance) en donjon |
 | `map.size` | Dimensions de la carte (m) | OK |
 | `map.roundtrip` | Carte → monde → carte, écart < 0,0005 | OK |
 | `UnitPosition.live` | Position monde brute | OK en extérieur (information) |
-| `minimap.radius` | `C_Minimap.GetViewRadius()` et zoom | OK, valeur qui change avec le zoom |
+| `minimap.radius` | `C_Minimap.GetViewRadius()` et zoom | OK, valeur qui change avec le zoom ; **vu en jeu** : 233,3 m au zoom 0, 66,7 m au zoom 5 |
 | `minimap.rotation` | Rotation et orientation | OK si rotation désactivée |
-| `minimap.shape` | `GetMinimapShape()` | INFO (ROUND par défaut) |
+| `minimap.shape` | `GetMinimapShape()` | INFO (ROUND par défaut) ; `GetMinimapShape` ABSENT sans addon de minicarte (vu en jeu) |
 | `tracking.types` | Pistage herbes / minerais | Selon les métiers du personnage |
 | `detection.blipEnumeration` | API d'énumération des points | INDISPONIBLE (n'existe pas) |
 | `detection.minimapProbeApi` | `SetUsingSoftCursor`, `UpdateMouseoverAtPoint`, `GetMinimapMouseover` | ATTENTION : disponible (expérimental) |

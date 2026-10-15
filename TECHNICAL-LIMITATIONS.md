@@ -1,16 +1,19 @@
 # PartyGatherRadar — Faisabilité et limitations techniques
 
-Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-10-14 pour la version 0.1.0.
+Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-10-15 pour la version 0.1.1.
 
 Légende des niveaux de confiance :
 
 - **Confirmé (doc)** : présent dans la documentation d'API générée par Blizzard pour la branche Forever ou le client 12.x.
 - **Confirmé (local)** : constaté sur l'installation de la bêta de ce poste (fichiers du client, addons installés).
 - **Constaté (tiers)** : observé dans un addon publié qui fonctionne sur Forever, sans documentation officielle.
-- **Non vérifié en jeu** : aucune exécution dans un client WoW réel n'a encore été faite par ce projet.
+- **Vérifié en jeu** : constaté par ce projet dans le client réel (deux clients, 2026-10-15).
+- **Non vérifié en jeu** : pas encore exécuté dans un client WoW réel par ce projet.
 
-> Aucun test en jeu n'a été exécuté à ce stade. Les tests automatisés hors jeu (Lua 5.1 + bouchons d'API)
-> valident la logique de l'addon, pas le comportement du client. Voir `Tests/TestPlan.md`.
+> Premiers tests en jeu le 2026-10-15 (deux clients, 0.1.0 puis 0.1.1) : chargement, sondes d'API,
+> identité et communication de groupe vérifiés. La détection sur la minicarte et l'affichage des icônes
+> ne le sont pas encore. Les tests automatisés hors jeu (Lua 5.1 + bouchons d'API) valident la logique de
+> l'addon, pas le comportement du client. Voir `Tests/TestPlan.md`.
 
 ## 1. Client ciblé
 
@@ -36,7 +39,7 @@ PartyGatherRadar identifie Forever par le numéro d'interface (16000 à 19999) e
 | A. Identifiant de ressource | Indisponible | L'infobulle ne donne que des noms localisés | Confirmé (doc : données d'infobulle) |
 | A. Type herbe / minerai | Indirect | Déductible du pistage actif ou d'une table de noms (phase 2) | Analyse |
 | A. Disparition d'une ressource | Partielle | Absence lors d'un nouveau balayage *dans le rayon* = incertaine ; récolte par le joueur détectable (`UNIT_SPELLCAST_SENT`, butin) | Analyse ; cible du sort potentiellement secrète |
-| **B. Communication de groupe** | Possible | `C_ChatInfo.RegisterAddonMessagePrefix`, `SendAddonMessage`, `CHAT_MSG_ADDON`, canaux PARTY / RAID / INSTANCE_CHAT | Confirmé (doc + DBM, BigWigs, EkinoksXP installés l'utilisent) ; non vérifié en jeu entre deux clients |
+| **B. Communication de groupe** | Possible | `C_ChatInfo.RegisterAddonMessagePrefix`, `SendAddonMessage`, `CHAT_MSG_ADDON`, canaux PARTY / RAID / INSTANCE_CHAT | Confirmé (doc + DBM, BigWigs, EkinoksXP installés l'utilisent) ; **vérifié en jeu** entre deux clients (PARTY, 0.1.1, 2026-10-15) |
 | **C. Icônes personnalisées sur la minicarte** | Possible | Cadres enfants de `Minimap`, positionnés depuis `C_Map` + `C_Minimap.GetViewRadius` | Confirmé (doc, HereBeDragons et TomTom le font sur Forever) ; non vérifié en jeu |
 | C. Suivi des déplacements, du zoom, des changements de carte | Possible | Rafraîchissement 10 Hz quand des marqueurs existent ; conversions officielles carte ↔ monde | Testé hors jeu |
 | C. Rotation de la minicarte | Partielle | CVar `rotateMinimap` + `GetPlayerFacing()` ; icônes masquées si l'orientation est inaccessible | Blizzard a corrigé en bêta 4 un accès aux valeurs de rotation **pendant les rencontres** |
@@ -95,6 +98,8 @@ développé en phase 2/3, clairement séparé des détections actives.
   d'un assouplissement. **À vérifier en jeu** : en donjon, le partage peut être indisponible.
 - `C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()` est affiché à titre informatif seulement : un
   autre auteur signale qu'il renvoie souvent vrai à tort ; le code de retour de l'envoi fait foi.
+  **Vérifié en jeu** (2026-10-15) : il renvoie `true` chez les deux clients alors que les messages PARTY
+  passent dans les deux sens.
 - **Comptes d'essai** : depuis la bêta 4 (build 70291), ils ne peuvent plus envoyer de messages d'addon.
 - Un message « accepté » par l'API n'est **jamais** considéré comme reçu : seule une réponse (PONG,
   HELLO) prouve la réception.
@@ -136,12 +141,11 @@ développé en phase 2/3, clairement séparé des détections actives.
 6. Formes de minicarte non rondes approximées comme carrées.
 7. Rotation de minicarte : non vérifiée en jeu ; icônes masquées si l'orientation est inaccessible.
 8. Identité des émetteurs vérifiée par comparaison avec les membres du groupe. Sur Forever (noms
-   régionaux, `RegionalUniqueNamesEnabled()`), l'identité est « Prénom Nom » : `UnitNameUnmodified`
-   renvoie (prénom, nom de famille) et l'émetteur reçu « Prénom Nom-Royaume » (constaté en jeu le
-   2026-10-15, corrigé en 0.1.1). Hypothèses non vérifiées en jeu : le royaume suit toujours le dernier
-   tiret de l'émetteur ; `RegionalUniqueNamesEnabled()` est déjà vrai au chargement de l'addon. La sonde
-   `identity.player` de `/pgr diag` permet de les contrôler. Royaumes classiques : « Nom-Royaume » via
-   `UnitFullName`.
+   régionaux, `RegionalUniqueNamesEnabled()`), l'identité est « Prénom Nom ». **Vérifié en jeu**
+   (2026-10-15) : `UnitNameUnmodified` **et** `UnitFullName` renvoient (prénom, nom de famille), jamais le
+   royaume ; l'émetteur reçu a la forme « Prénom Nom-Royaume » ; avec 0.1.1, découverte mutuelle sans
+   aucun rejet. Non vérifié : un nom de famille contenant un tiret (le royaume est retiré au dernier
+   tiret). Royaumes classiques : « Nom-Royaume » via `UnitFullName`.
 9. Aucune garantie de réception des messages (limitation inhérente à la messagerie d'addon).
 
 ## 5. Sources

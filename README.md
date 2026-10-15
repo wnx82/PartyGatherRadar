@@ -5,9 +5,9 @@ entre membres d'un groupe, les ressources de récolte (herbes, minerais) détect
 
 > **État : prototype 0.1.1 (phases 0 et 1).** L'infrastructure (protocole réseau, découverte des
 > membres, couche d'icônes sur la minicarte, diagnostics, sondes de détection) est en place et testée
-> hors jeu. Le partage automatique des plantes détectées arrive en phase 2/3. **Presque rien n'a encore
-> été vérifié dans un client WoW réel** : le premier essai à deux (0.1.0) a révélé le format des noms de
-> Forever, corrigé en 0.1.1. Voir [Tests/TestPlan.md](Tests/TestPlan.md).
+> hors jeu. Le partage automatique des plantes détectées arrive en phase 2/3. **Vérifié en jeu** (2026-10-15,
+> deux clients) : chargement, sondes d'API, identité et communication de groupe. **Pas encore vérifié** :
+> détection sur la minicarte et affichage des icônes. Voir [Tests/TestPlan.md](Tests/TestPlan.md).
 
 ## Objectif
 
@@ -21,7 +21,7 @@ propre minicarte. Le partage fonctionne dans les deux sens et prévoit les miner
 |---|---|
 | Lister les points de pistage de la minicarte | **Impossible** : aucune API |
 | Lire le nom d'un point (survol, ou sondage officiel propre à Forever) | **Possible, expérimental**, non vérifié en jeu |
-| Communiquer entre membres du groupe (messages d'addon) | Possible, non vérifié en jeu entre deux clients |
+| Communiquer entre membres du groupe (messages d'addon) | **Vérifié en jeu** entre deux clients (0.1.1) |
 | Afficher des icônes personnalisées sur la minicarte | Possible, non vérifié en jeu |
 
 Détails, niveaux de confiance et sources : [TECHNICAL-LIMITATIONS.md](TECHNICAL-LIMITATIONS.md).

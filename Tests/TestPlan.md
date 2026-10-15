@@ -5,8 +5,9 @@ Deux niveaux de tests :
 1. **Tests automatisés hors jeu** : Lua 5.1 + bouchons de l'API WoW + simulation de plusieurs clients
    reliés par un faux réseau. Ils valident la logique de l'addon contre le comportement *documenté*.
 2. **Tests en jeu** : seuls capables de valider le comportement réel du client Forever.
-   Statut « Non exécuté » tant qu'un rapport n'a pas été fourni. Premier essai à deux clients le
-   2026-10-15 en 0.1.0 : voir le scénario 1.
+   Statut « Non exécuté » tant qu'un rapport n'a pas été fourni. Essais du 2026-10-15 : 0.1.0 en échec,
+   puis 0.1.1 validée pour la découverte mutuelle (voir le scénario 1). Sources : `diagnostics.lastReport`
+   et `diagnostics.log` d'Aedot (PC MSI) et d'Aekiss (PC ASUS).
 
 ## 1. Tests automatisés
 
@@ -59,36 +60,39 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 
 | Étape | Résultat attendu | Statut |
 |---|---|---|
-| `/pgr version` | 1.60.1, build ≥ 70374, interface 16001, WoW Forever : oui | Non exécuté |
-| `/pgr diag` | Aucune `ERREUR` ; `detection.minimapProbeApi` = ATTENTION (disponible) ; localisation fiable = OUI en extérieur | Non exécuté |
-| `/pgr diag` : ligne `identity.player` | Identité « Prénom Nom » (ex. « Aedot Wnx »), noms régionaux : true ; rapport copié dans `diagnostics.lastReport` après `/reload` | Non exécuté |
-| Aekiss : `/pgr probe tracking` | Découverte d'herbes listée (active ou non) | Non exécuté |
+| `/pgr version` | 1.60.1, build ≥ 70374, interface 16001, WoW Forever : oui | **OK** (2026-10-15, les deux) : 1.60.1 (70374), interface 16001, `WOW_PROJECT_ID` = `WOW_PROJECT_CAMELOT` = 18 |
+| `/pgr diag` | Aucune `ERREUR` ; `detection.minimapProbeApi` = ATTENTION (disponible) ; localisation fiable = OUI en extérieur | **OK** (2026-10-15, les deux) ; `GetMinimapShape` ABSENT (normal sans addon de minicarte), `comm.realmRestricted` = true alors que les messages passent |
+| `/pgr diag` : ligne `identity.player` | Identité « Prénom Nom » (ex. « Aedot Wnx »), noms régionaux : true ; rapport copié dans `diagnostics.lastReport` après `/reload` | **OK** (2026-10-15) : « Aedot Wnx », « Aekiss Desbisous » ; `UnitFullName` et `UnitNameUnmodified` renvoient tous deux (prénom, nom de famille) |
+| Aekiss : `/pgr probe tracking` | Découverte d'herbes listée (active ou non) | **OK** (2026-10-15, via `tracking.types` de `/pgr diag`) : 24 types, herbes actif |
 | Aekiss, pistage herbes actif, `/pgr probe minimap` puis survol d'un point | Nom de la plante affiché, position plausible | Non exécuté |
 | Aekiss : `/pgr probe scan` hors combat, souris hors de la minicarte | Marqueurs « [Sonde] … » **superposés** aux points natifs (capture d'écran), aucun clignotement d'infobulle | Non exécuté |
 | Idem, minicarte zoomée au maximum puis au minimum | Superposition conservée ; précision meilleure au zoom maximal | Non exécuté |
 | Idem avec `/console rotateMinimap 1` | Superposition conservée, ou marqueurs masqués si l'orientation est inaccessible | Non exécuté |
 | Idem en combat | « balayage impossible : en combat » | Non exécuté |
-| Aedot : `/pgr probe tracking`, `/pgr probe scan` | Pas de pistage d'herbes ; aucune plante trouvée (seuls PNJ/joueurs éventuels) | Non exécuté |
+| Aedot : `/pgr probe tracking`, `/pgr probe scan` | Pas de pistage d'herbes ; aucune plante trouvée (seuls PNJ/joueurs éventuels) | Partiel (2026-10-15) : herbes non (OK) ; balayage non exécuté |
 
 ### Scénario 1 — HELLO et découverte mutuelle
 
 | Étape | Résultat attendu | Statut |
 |---|---|---|
-| Aekiss invite Aedot | Chez chacun : « <autre> utilise PartyGatherRadar 0.1.1 (protocole 1) » en quelques secondes | **Échec en 0.1.0** (2026-10-15), corrigé en 0.1.1, à refaire |
-| `/pgr peers` chez les deux | L'autre listé, compatible, capacités cohérentes | Non exécuté |
-| `/pgr status` | B. synchronisation = OUI (message valide reçu) | Non exécuté |
-| `/pgr test` chez Aekiss | Marqueur TEST local à ~21 m au nord-est ; « PONG reçu de Aedot en N ms » ; marqueur TEST chez Aedot | Non exécuté |
+| Aekiss invite Aedot | Chez chacun : « <autre> utilise PartyGatherRadar 0.1.1 (protocole 1) » en quelques secondes | **OK en 0.1.1** (2026-10-15) : message valide reçu des deux côtés, 0 rejet ; échec en 0.1.0 |
+| `/pgr peers` chez les deux | L'autre listé, compatible, capacités cohérentes | Non rapporté (sortie dans la discussion seulement) |
+| `/pgr status` | B. synchronisation = OUI (message valide reçu) | **OK** (2026-10-15) : OUI chez les deux, via `/pgr diag` |
+| `/pgr test` chez Aekiss | Marqueur TEST local à ~21 m au nord-est ; « PONG reçu de Aedot en N ms » ; marqueur TEST chez Aedot | Partiel (2026-10-15) : PING et NODE TEST envoyés, PONG envoyé par Aedot, NODE TEST reçu chez Aedot ; réception du PONG non journalisée ; affichage non vérifiable (Aedot aux Tarides, Aekiss en Azshara) |
 
 Essai du 2026-10-15 (0.1.0, journal d'Aedot) : HELLO envoyé, messages d'Aekiss bien reçus, mais rejetés
 (`not_in_group`) ; propre écho non reconnu. Cause : sur Forever, l'émetteur a la forme `Prénom Nom-Royaume`
 (`Aedot Wnx-ClassicBetaPvE2`) alors que l'identité venait de `UnitFullName`. Corrigé en 0.1.1 (identité
-« Prénom Nom »). À refaire avec 0.1.1 installée **sur les deux PC**, `/pgr debug` actif chez les deux.
+« Prénom Nom »).
+
+Essai du 2026-10-15 (0.1.1, les deux journaux) : découverte mutuelle réussie, aucun rejet, échos
+reconnus (3 chez Aedot, 4 chez Aekiss), aucune erreur Lua.
 
 ### Scénario 2 — Détections accessibles à chacun
 
 | Étape | Résultat attendu | Statut |
 |---|---|---|
-| Aekiss pistage herbes actif, Aedot sans pistage, `/pgr peers` | Aekiss annonce « herbes », Aedot non | Non exécuté |
+| Aekiss pistage herbes actif, Aedot sans pistage, `/pgr peers` | Aekiss annonce « herbes », Aedot non | Partiel (2026-10-15) : pistage confirmé par `/pgr diag` ; annonce via `/pgr peers` non rapportée |
 | `/pgr probe scan` chez les deux au même endroit | Plantes trouvées seulement chez Aekiss | Non exécuté |
 
 ### Scénario 3 — Transmission d'une plante (phase 3)
