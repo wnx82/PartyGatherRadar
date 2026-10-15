@@ -60,6 +60,12 @@
     <None Include="Detection\Tracking.lua">
       <Filter>Detection</Filter>
     </None>
+    <None Include="Detection\ResourceNames.lua">
+      <Filter>Detection</Filter>
+    </None>
+    <None Include="Detection\AutoDetect.lua">
+      <Filter>Detection</Filter>
+    </None>
     <None Include="Communication\GroupSync.lua">
       <Filter>Communication</Filter>
     </None>

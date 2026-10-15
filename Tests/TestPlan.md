@@ -1,4 +1,4 @@
-# Plan de tests — PartyGatherRadar 0.2.0
+# Plan de tests — PartyGatherRadar 0.3.0
 
 Deux niveaux de tests :
 
@@ -32,6 +32,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | Expiration des marqueurs | Récente → incertaine (60 s) → supprimée (300 s), âge transmis, TEST (120 s), historique sans expiration |
 | Messages invalides | Types, tailles, champs, énumérations, noms avec `|`, incohérences TEST, émetteur hors groupe, canaux interdits, valeurs secrètes |
 | Identité des joueurs | Noms régionaux de Forever (« Prénom Nom-Royaume ») : découverte, écho, PING/PONG, homonymes de prénom, départ, normalisation ; mode classique « Nom-Royaume » |
+| Détection automatique | Tri des noms (herbes, minerais ; quêtes et joueurs ignorés), herbe partagée au bon endroit (≤ 15 m), sans doublon chez le détecteur, deux plantes de même nom séparées, disparition (REMOVE) seulement dans la zone fiable, déplacement (≤ 12 m), rafraîchissement sans flot, réception réactivée, nouveau membre, partage désactivé, noms appris à la récolte, conditions d'arrêt (pistage, combat, souris, option), cohabitation avec la sonde manuelle, statut et diagnostic |
 | Interface | Bouton de minicarte (création, position ronde/carrée, déplacement, masquage conservé), fenêtre de réglages (version, membres avec et sans l'addon, mise à jour au départ du groupe, chaque case modifie son réglage, infos des autres masquées puis réaffichées), anglais |
 | Changements de groupe | Départ d'un membre, dissolution du groupe, BYE, /reload, membre sans addon, raid |
 | Séparation simulé / réel | Magasins séparés, mélanges refusés, pas de fusion TEST/réel, sonde de calibration en TEST uniquement |
@@ -46,6 +47,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | 2026-10-14 | Lua 5.1 embarqué (lupa) | 89 réussis, 0 échec (0.1.0) |
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 97 réussis, 0 échec (0.1.1) |
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 106 réussis, 0 échec (0.2.0) |
+| 2026-10-15 | Lua 5.1 embarqué (lupa) | 122 réussis, 0 échec (0.3.0) |
 
 ## 2. Tests en jeu
 
@@ -99,8 +101,8 @@ reconnus (3 chez Aedot, 4 chez Aekiss), aucune erreur Lua.
 
 ### Scénario 3 — Transmission d'une plante (phase 3)
 
-Le partage automatique des détections réelles n'existe pas en 0.1.1. Vérifiable aujourd'hui :
-`/pgr test` (marqueur TEST) et l'alignement des marqueurs reçus avec la position réelle.
+Depuis 0.3.0, les plantes détectées sont partagées automatiquement (scénario 10). Les étapes ci-dessous
+vérifient l'alignement avec le marqueur TEST de `/pgr test`.
 
 | Étape | Résultat attendu | Statut |
 |---|---|---|
@@ -144,16 +146,30 @@ Le partage automatique des détections réelles n'existe pas en 0.1.1. Vérifiab
 | Aedot désactive l'addon, `/reload`, groupe avec Aekiss | Chez Aekiss : aucun pair, `/pgr peers` liste Aedot « sans addon détecté » | Non exécuté |
 | `/pgr test` chez Aekiss | « aucun PONG reçu en 5 s », aucune erreur | Non exécuté |
 
-### Scénario 9 — Bouton de minicarte et fenêtre de réglages (0.2.0)
+### Scénario 9 — Bouton de minicarte et fenêtre de réglages (0.2.0 et suivantes)
 
 | Étape | Résultat attendu | Statut |
 |---|---|---|
 | Connexion | Bouton (icône de fleur) sur le bord de la minicarte, en bas à gauche | Non exécuté |
-| Survol du bouton | Infobulle : « PartyGatherRadar 0.2.0 », membres du groupe et nombre avec l'addon | Non exécuté |
+| Survol du bouton | Infobulle : « PartyGatherRadar 0.3.0 », membres du groupe et nombre avec l'addon | Non exécuté |
 | Glisser le bouton, `/reload` | Le bouton suit le bord de la minicarte et garde sa place après `/reload` | Non exécuté |
-| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.2.0 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
+| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.3.0 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
 | Aedot `/pgr test`, Aekiss décoche « Afficher les infos des autres joueurs » | Le marqueur TEST d'Aedot disparaît de la minicarte d'Aekiss, puis revient quand la case est recochée | Non exécuté |
 | Décocher « Bouton autour de la minicarte » | Bouton masqué ; `/pgr` rouvre la fenêtre ; `/pgr button on` le réaffiche | Non exécuté |
+
+### Scénario 10 — Détection automatique et partage (0.3.0)
+
+| Étape | Résultat attendu | Statut |
+|---|---|---|
+| Aekiss, Découverte d'herbes active, côte à côte avec Aedot près de plantes | En quelques secondes, chez Aedot : une icône verte par plante, au même endroit que le point natif chez Aekiss (captures des deux minicartes) | Non exécuté |
+| Survol d'une icône chez Aedot | Nom de la plante, « Détecté par Aekiss », état « Détection récente » | Non exécuté |
+| Zone de quête active sur la minicarte | Aucune icône pour la quête ni pour les joueurs ; journal d'Aekiss : « nom ignoré » une fois par nom | Non exécuté |
+| Aekiss récolte une plante | L'icône disparaît chez Aedot en ~4 s | Non exécuté |
+| Aekiss court (monture) dans une zone riche en plantes | Icônes chez Aedot sans doublons, images par seconde d'Aekiss normales, infobulle native sans clignotement | Non exécuté |
+| Aekiss coupe le pistage, ou entre en combat | Plus aucun sondage (`/pgr status` : nombre de balayages figé) | Non exécuté |
+| Case « Afficher aussi mes propres détections » chez Aekiss | Icônes superposées aux points natifs (capture, zoom minimal et maximal) | Non exécuté |
+| Aedot décoche « Afficher les infos des autres joueurs » | Icônes masquées, puis revenues au plus tard 25 s après la nouvelle coche | Non exécuté |
+| Après l'essai : `/pgr diag` puis `/reload` chez les deux | `lastReport` : ligne `detection.auto` (balayages, ressources, noms ignorés) | Non exécuté |
 
 ### Scénarios complémentaires
 

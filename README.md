@@ -3,12 +3,11 @@
 Addon pour **World of Warcraft: Forever** (bêta 1.60.1, interface 16001) : partager en temps réel,
 entre membres d'un groupe, les ressources de récolte (herbes, minerais) détectées sur la minicarte.
 
-> **État : prototype 0.2.0 (phases 0 et 1, plus bouton de minicarte et fenêtre de réglages).**
-> L'infrastructure (protocole réseau, découverte des membres, couche d'icônes sur la minicarte,
-> diagnostics, sondes de détection) est en place et testée hors jeu. Le partage automatique des plantes
-> détectées arrive en phase 2/3. **Vérifié en jeu** (2026-10-15, deux clients) : chargement, sondes
+> **État : prototype 0.3.0.** Détection automatique des herbes et minerais de la minicarte et partage
+> au groupe (phases 2 et 3, expérimental), bouton de minicarte et fenêtre de réglages. Le tout est testé
+> hors jeu (simulation de plusieurs clients). **Vérifié en jeu** (2026-10-15, deux clients) : chargement, sondes
 > d'API, identité, communication de groupe, lecture des plantes par le balayage. **Pas encore vérifié** :
-> superposition des icônes aux points natifs, bouton et fenêtre de réglages. Voir
+> détection automatique et partage des plantes, bouton et fenêtre de réglages. Voir
 > [Tests/TestPlan.md](Tests/TestPlan.md).
 
 ## Objectif
@@ -33,7 +32,7 @@ externe, aucune automatisation de déplacement, d'interaction ou de récolte, au
 artificiellement chez un joueur qui ne le possède pas. Aucune position n'est inventée : sans donnée
 fiable, rien n'est affiché.
 
-## Fonctionnalités de la version 0.2.0
+## Fonctionnalités de la version 0.3.0
 
 Réellement implémenté :
 
@@ -51,22 +50,25 @@ Réellement implémenté :
   l'orientation est accessible, infobulle détaillée ;
 - diagnostics : sondes d'API, matrice de capacités, compteurs, journal sauvegardable ; rapport de
   `/pgr diag` sauvegardé dans `diagnostics.lastReport` ;
-- sondes de détection : lecture de l'infobulle de minicarte au survol, balayage expérimental ;
+- **détection automatique** (pistage des herbes ou des minerais actif) : la minicarte est sondée toutes
+  les 2 s ; seuls les noms d'herbes et de minerais connus sont gardés (les zones de quête et les joueurs
+  sont ignorés) ; une plante découverte est envoyée au groupe, rafraîchie toutes les 25 s tant qu'elle
+  reste visible, puis retirée chez tous quand elle disparaît (récoltée) ; noms appris à la récolte ;
+- sondes de détection : lecture de l'infobulle de minicarte au survol, balayage manuel ;
 - test contrôlé `/pgr test` (données marquées TEST, jamais mélangées aux détections réelles) ;
 - isolation des erreurs : un module défaillant est désactivé sans arrêter les autres ;
 - bouton autour de la minicarte (déplaçable, masquable) et fenêtre de réglages : version, membres du
   groupe qui utilisent l'addon, affichage des infos des autres joueurs, partage, herbes, minerais ;
 - français (référence) et anglais.
 
-Prévu (non implémenté) : détection continue des herbes et minerais et leur partage (phases 2-3),
-mode de secours (positions de récolte, marqueurs manuels partagés), carte du monde (phase 3),
+Prévu (non implémenté) : mode de secours (positions de récolte, marqueurs manuels partagés), carte du monde (phase 3),
 réglages avancés (taille, couleurs, durées) dans la fenêtre (phase 4).
 
 ## Installation
 
 Chemin cible : `World of Warcraft\_classic_beta_\Interface\AddOns\PartyGatherRadar\`
 
-**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.2.0.zip` dans le dossier `AddOns` ; le ZIP
+**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.3.0.zip` dans le dossier `AddOns` ; le ZIP
 contient déjà le dossier `PartyGatherRadar\`. Vérifier que le chemin final est
 `AddOns\PartyGatherRadar\PartyGatherRadar.toc` (et non `AddOns\PartyGatherRadar\PartyGatherRadar\…`).
 
@@ -97,20 +99,22 @@ n'est nécessaire.
 | `/pgr probe [minimap\|scan\|tracking\|vignettes]` | Sondes de détection (voir [Tests/API-Probes.md](Tests/API-Probes.md)) |
 | `/pgr log [n]` | Dernières lignes du journal |
 | `/pgr on\|off` | Active / désactive l'addon |
-| `/pgr share\|receive\|minimap\|button [on\|off]` | Partage, réception (infos des autres joueurs), affichage sur la minicarte, bouton de minicarte |
+| `/pgr share\|receive\|minimap\|button\|auto [on\|off]` | Partage, réception (infos des autres joueurs), affichage sur la minicarte, bouton de minicarte, détection automatique |
 
 ## Premier essai à deux
 
 1. Installer l'addon chez les deux joueurs, se grouper.
-2. Chacun voit « <autre> utilise PartyGatherRadar 0.2.0 ». Sinon : `/pgr status` et `/pgr diag`.
-3. Aekiss tape `/pgr test` : un marqueur bleu TEST apparaît chez les deux, au même endroit du terrain,
-   et Aekiss lit « PONG reçu de Aedot ».
-4. Aekiss, Découverte d'herbes active : `/pgr probe scan` ; les marqueurs « [Sonde] » doivent
-   recouvrir les points natifs. Envoyer le résultat (voir [Tests/API-Probes.md](Tests/API-Probes.md)).
+2. Chacun voit « <autre> utilise PartyGatherRadar 0.3.0 ». Sinon : `/pgr status` et `/pgr diag`.
+3. Aekiss active Découverte d'herbes et s'approche de plantes : en quelques secondes, Aedot voit une
+   icône verte à l'emplacement de chaque plante sur sa propre minicarte (survol : nom, « Détecté par
+   Aekiss »). Rien à taper : la détection est automatique.
+4. Aekiss récolte une plante : son icône disparaît chez Aedot après deux balayages (environ 4 s).
+5. Contrôle de la superposition chez Aekiss : case « Afficher aussi mes propres détections »
+   (fenêtre `/pgr`), les icônes doivent recouvrir les points natifs.
 
 ## Réglages par défaut
 
-Partage et réception activés, minicarte activée, canal RAID en raid (expérimental), INSTANCE_CHAT
+Détection automatique, partage et réception activés ; propres détections masquées ; minicarte activée ; canal RAID en raid (expérimental), INSTANCE_CHAT
 désactivé ; icônes 14 px, opacité 0,9 ; détection récente 60 s puis incertaine 240 s ; TEST 120 s.
 Cases principales dans la fenêtre de réglages (`/pgr`) ; taille, couleurs et durées dans
 `PartyGatherRadarDB.settings` en attendant la phase 4.

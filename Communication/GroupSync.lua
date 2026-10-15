@@ -334,9 +334,11 @@ function GroupSync.StartPingTest()
 		for name, rtt in pairs(current.responses) do
 			count = count + 1
 			ns.Print(ns.T("TEST_PONG_FROM", ns.ShortName(name), rtt * 1000))
+			ns.Diagnostics.Log("TEST", "PONG reçu de %s en %.0f ms", name, rtt * 1000)
 		end
 		if count == 0 then
 			ns.Print(ns.T("TEST_NO_PONG", PING_TIMEOUT))
+			ns.Diagnostics.Log("TEST", "aucun PONG reçu en %d s", PING_TIMEOUT)
 		end
 		local last = ns.Sender.lastResult
 		if last then

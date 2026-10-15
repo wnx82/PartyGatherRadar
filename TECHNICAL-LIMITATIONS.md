@@ -1,6 +1,6 @@
 # PartyGatherRadar — Faisabilité et limitations techniques
 
-Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-10-15 pour la version 0.1.1.
+Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-10-15 pour la version 0.3.0.
 
 Légende des niveaux de confiance :
 
@@ -37,7 +37,7 @@ PartyGatherRadar identifie Forever par le numéro d'interface (16000 à 19999) e
 | **A. Sonder la minicarte sans bouger la souris** | Possible, **expérimental** | `Minimap:SetUsingSoftCursor(bool)` + `Minimap:UpdateMouseoverAtPoint(x, y)` : fonctions **propres à la branche Forever** | Confirmé (doc) ; utilisé par NodeSight ; **vérifié en jeu** (2026-10-15, 293 points sans erreur) ; clignotement de l'infobulle non vérifié |
 | A. Position d'un point détecté | Approximative | Grille de sondage → décalage en unités de minicarte → mètres (`C_Minimap.GetViewRadius`) → coordonnées de carte | Calcul testé hors jeu ; en jeu, joueurs retrouvés à 0,3 m et 8 m (près du centre) ; échelle à distance non vérifiée |
 | A. Identifiant de ressource | Indisponible | L'infobulle ne donne que des noms localisés | Confirmé (doc : données d'infobulle) |
-| A. Type herbe / minerai | Indirect | Déductible du pistage actif ou d'une table de noms (phase 2) | Analyse |
+| A. Type herbe / minerai | Indirect | Table de noms (français, anglais, sans accents), forme des noms de gisements, noms appris à la récolte (`Detection/ResourceNames.lua`) | Testé hors jeu ; « Pacifique » et « Eglantine » vus en jeu |
 | A. Disparition d'une ressource | Partielle | Absence lors d'un nouveau balayage *dans le rayon* = incertaine ; récolte par le joueur détectable (`UNIT_SPELLCAST_SENT`, butin) | Analyse ; cible du sort potentiellement secrète |
 | **B. Communication de groupe** | Possible | `C_ChatInfo.RegisterAddonMessagePrefix`, `SendAddonMessage`, `CHAT_MSG_ADDON`, canaux PARTY / RAID / INSTANCE_CHAT | Confirmé (doc + DBM, BigWigs, EkinoksXP installés l'utilisent) ; **vérifié en jeu** entre deux clients (PARTY, 0.1.1, 2026-10-15) |
 | **C. Icônes personnalisées sur la minicarte** | Possible | Cadres enfants de `Minimap`, positionnés depuis `C_Map` + `C_Minimap.GetViewRadius` | Confirmé (doc, HereBeDragons et TomTom le font sur Forever) ; non vérifié en jeu |
@@ -138,10 +138,15 @@ développé en phase 2/3, clairement séparé des détections actives.
 - Les icônes peuvent recouvrir des points natifs (quêtes) : taille 14 px et transparence 0,9 par défaut,
   réglables.
 
-## 4. Limitations connues de la version 0.2.0
+## 4. Limitations connues de la version 0.3.0
 
-1. Pas de détection continue : la phase 0 fournit des **sondes** à la demande (`/pgr probe ...`).
-2. Pas de partage automatique de détections réelles : seul `/pgr test` diffuse un marqueur (TEST).
+1. Détection automatique **non vérifiée en jeu** : précision à distance, coût en images par seconde,
+   effet éventuel sur l'infobulle native (le sondage s'arrête quand la souris survole la minicarte).
+2. Tri par noms : une herbe absente de la liste (nom français mal orthographié, autre langue que le
+   français ou l'anglais) est ignorée jusqu'à sa première récolte, qui l'apprend. Les noms ignorés sont
+   dans le journal (« nom ignoré »). Deux plantes du même nom à moins d'environ 50 m (zoom minimal)
+   donnent un seul marqueur. Deux herboristes qui voient la même plante peuvent produire deux
+   marqueurs à plus de 5 m l'un de l'autre (fusion limitée à 5 m).
 3. Pas de mode de secours (positions de récolte, marqueurs manuels) : phase 2/3.
 4. Fenêtre de réglages simple (cases à cocher) : taille, couleurs et durées seulement dans
    `PartyGatherRadarDB.settings` (phase 4). Bouton et fenêtre non encore vérifiés en jeu.

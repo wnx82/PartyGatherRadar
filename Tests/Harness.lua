@@ -246,6 +246,10 @@ function World:NewClient(opts)
 	client.sent = {}
 	client.sendResult = nil -- code forcé renvoyé par SendAddonMessage (tests de refus)
 	client.blips = {}       -- points de minicarte simulés : { name, dx, dy } (unités du cadre)
+	client.worldBlips = {}  -- ressources dans le monde : { name, mapID, x, y } (coordonnées de carte)
+	client.worldBlipRadius = 12 -- unités du cadre : zone de survol d'un point
+	client.mouseoverCalls = 0
+	client.inCombat = false
 	-- types de pistage connus du personnage (C_Minimap.GetTrackingInfo)
 	client.tracking = opts.tracking or {}
 	self.clients[#self.clients + 1] = client
@@ -441,7 +445,7 @@ local function BuildEnvironment(client)
 	}
 	client.cursorX, client.cursorY = 0, 0
 	api.issecretvalue = function(value) return value == H.SECRET end
-	api.InCombatLockdown = function() return false end
+	api.InCombatLockdown = function() return client.inCombat end
 	api.IsIndoors = function() return false end
 	api.GetPlayerFacing = function() return client.facing end
 	api.GetCursorPosition = function() return client.cursorX, client.cursorY end
@@ -613,7 +617,9 @@ local function BuildEnvironment(client)
 	api.Minimap.UpdateMouseoverAtPoint = function(_, x, y)
 		assert(client.softCursor, "UpdateMouseoverAtPoint appelé sans curseur logiciel")
 		client.mouseover = { x - 1070, y - 670 }
+		client.mouseoverCalls = client.mouseoverCalls + 1
 	end
+	api.Minimap.IsMouseOver = function() return client.mouseOverMinimap == true end
 	api.C_TooltipInfo = {
 		GetMinimapMouseover = function()
 			local point = client.mouseover
@@ -625,6 +631,23 @@ local function BuildEnvironment(client)
 				if (point[1] - blip.dx) ^ 2 + (point[2] - blip.dy) ^ 2 <= 7 ^ 2 then
 					lines[#lines + 1] = { leftText = blip.name }
 				end
+			end
+			-- points ancrés dans le monde : leur place sur la minicarte suit la position du joueur
+			-- (minicarte fixe, 233,333 m pour 70 unités) ; zone de survol large, comme en jeu (~6 points touchés)
+			local map = MAPS[client.mapID]
+			local unitsPerYard = 70 / 233.333
+			for _, blip in ipairs(client.worldBlips) do
+				if blip.mapID == client.mapID then
+					local dx = (blip.x - client.x) * map.width * unitsPerYard
+					local dy = (client.y - blip.y) * map.height * unitsPerYard
+					if (point[1] - dx) ^ 2 + (point[2] - dy) ^ 2 <= client.worldBlipRadius ^ 2 then
+						lines[#lines + 1] = { leftText = blip.name }
+					end
+				end
+			end
+			-- zone de quête : couvre toute la minicarte (constaté en jeu), deux lignes
+			if client.questArea then
+				lines[#lines + 1] = { leftText = client.questArea .. "\n- " .. client.questArea .. " : 0/8" }
 			end
 			return { lines = lines }
 		end,

@@ -43,6 +43,7 @@ local function PrintStatus()
 		YesNo(ns.Sender.IsPaused())))
 	local real, test = ns.MarkerManager.Count()
 	ns.Print(ns.T("STATUS_MARKERS", real, test, ns.MinimapOverlay.GetVisibleCount()))
+	ns.Print(ns.T("STATUS_DETECTION", YesNo(ns.Config.Get("autoDetect")), ns.AutoDetect.Describe()))
 	ns.Diagnostics.PrintCapabilities()
 end
 
@@ -229,7 +230,7 @@ end
 ---------------------------------------------------------------------------
 
 local TOGGLES = { share = "shareEnabled", receive = "receiveEnabled", minimap = "showMinimap",
-	button = "showMinimapButton" }
+	button = "showMinimapButton", auto = "autoDetect" }
 
 local function SetToggle(key, argument)
 	local value

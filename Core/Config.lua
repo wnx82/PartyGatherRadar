@@ -21,6 +21,10 @@ Config.DEFAULTS = {
 	allowRaid = true,           -- canal RAID en raid (expérimental)
 	allowInstanceChat = false,  -- canal INSTANCE_CHAT en groupe de recherche (expérimental)
 
+	-- Détection automatique (pistage actif, minicarte sondée toutes les 2 s)
+	autoDetect = true,
+	showOwnDetections = false,  -- nos détections sur notre minicarte (contrôle de la superposition)
+
 	-- Ressources
 	showHerbs = true,
 	showOres = true,

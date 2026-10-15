@@ -198,6 +198,10 @@ local function PassesFilters(marker, status)
 	if not marker.isLocal and not ns.Config.Get("receiveEnabled") then
 		return false
 	end
+	-- nos propres détections recouvriraient les points natifs de notre minicarte : masquées par défaut
+	if marker.isLocal and marker.source == "LIVE" and not ns.Config.Get("showOwnDetections") then
+		return false
+	end
 	if marker.kind == "HERB" and not ns.Config.Get("showHerbs") then
 		return false
 	end

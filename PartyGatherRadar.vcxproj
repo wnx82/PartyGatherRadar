@@ -159,6 +159,8 @@
     <None Include="Localization\frFR.lua" />
     <None Include="Detection\Coordinates.lua" />
     <None Include="Detection\Tracking.lua" />
+    <None Include="Detection\ResourceNames.lua" />
+    <None Include="Detection\AutoDetect.lua" />
     <None Include="Communication\GroupSync.lua" />
     <None Include="Communication\Protocol.lua" />
     <None Include="Communication\Receiver.lua" />

@@ -70,11 +70,13 @@ end
 local function BuildOptions()
 	return {
 		{ key = "enabled", label = ns.T("OPT_ENABLED") },
+		{ key = "autoDetect", label = ns.T("OPT_AUTO_DETECT") },
 		{ key = "receiveEnabled", label = ns.T("OPT_RECEIVE") },
 		{ key = "shareEnabled", label = ns.T("OPT_SHARE") },
 		{ key = "showMinimap", label = ns.T("OPT_SHOW_MINIMAP") },
 		{ key = "showHerbs", label = ns.T("OPT_HERBS") },
 		{ key = "showOres", label = ns.T("OPT_ORES") },
+		{ key = "showOwnDetections", label = ns.T("OPT_SHOW_OWN") },
 		{ key = "showMinimapButton", label = ns.T("OPT_BUTTON") },
 		{ key = "debug", label = ns.T("OPT_DEBUG") },
 	}

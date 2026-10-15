@@ -13,9 +13,9 @@ return function(H, root)
 	H.suite("Projet : TOC, chargement, variables globales")
 	---------------------------------------------------------------------------
 
-	H.test("le TOC cible l'interface 16001 et la version 0.2.0", function()
+	H.test("le TOC cible l'interface 16001 et la version 0.3.0", function()
 		H.eq(world.metadata.Interface, "16001", "## Interface")
-		H.eq(world.metadata.Version, "0.2.0", "## Version")
+		H.eq(world.metadata.Version, "0.3.0", "## Version")
 		H.eq(world.metadata.Version, ns.VERSION, "version du TOC et de Init.lua")
 		H.eq(world.metadata.SavedVariables, "PartyGatherRadarDB", "## SavedVariables")
 	end)
