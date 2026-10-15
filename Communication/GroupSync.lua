@@ -22,6 +22,7 @@ local PONG_MIN_INTERVAL = 2   -- au plus un PONG par pair sur cette durée
 local roster = {}  -- [nom complet] = unité ("party1", "raid3"...)
 local peers = {}   -- [nom complet] = { addonVersion, proto, minProto, caps, compatible, firstSeen, lastSeen, messages, sharing }
 local inGroup = false
+local lastRosterSize = 0
 local lastHelloAt = -HELLO_MIN_INTERVAL
 local helloScheduled = false
 local pingTest -- { nonce, sentAt, responses = { [nom] = rtt } }
@@ -136,6 +137,8 @@ function GroupSync.RebuildRoster()
 
 	local wasInGroup = inGroup
 	inGroup = nowInGroup
+	local previousSize = lastRosterSize
+	lastRosterSize = GroupSync.GetRosterSize()
 	if wasInGroup and not nowInGroup then
 		ForgetGroup()
 		ns.Diagnostics.Log("GROUP", "groupe quitté")
@@ -147,8 +150,11 @@ function GroupSync.RebuildRoster()
 		end
 	end
 	if nowInGroup and not wasInGroup then
-		ns.Diagnostics.Log("GROUP", "groupe rejoint (%d autre(s) membre(s))", GroupSync.GetRosterSize())
+		ns.Diagnostics.Log("GROUP", "groupe rejoint (%d autre(s) membre(s))", lastRosterSize)
 		GroupSync.RequestHello("groupe rejoint")
+	elseif nowInGroup and lastRosterSize ~= previousSize then
+		-- la composition arrive parfois après GROUP_JOINED : trace utile pour vérifier les identités en jeu
+		ns.Diagnostics.Log("GROUP", "composition : %d autre(s) membre(s)", lastRosterSize)
 	end
 end
 

@@ -126,7 +126,7 @@ développé en phase 2/3, clairement séparé des détections actives.
 - Les icônes peuvent recouvrir des points natifs (quêtes) : taille 14 px et transparence 0,9 par défaut,
   réglables.
 
-## 4. Limitations connues de la version 0.1.0
+## 4. Limitations connues de la version 0.1.1
 
 1. Pas de détection continue : la phase 0 fournit des **sondes** à la demande (`/pgr probe ...`).
 2. Pas de partage automatique de détections réelles : seul `/pgr test` diffuse un marqueur (TEST).
@@ -135,14 +135,20 @@ développé en phase 2/3, clairement séparé des détections actives.
 5. Pas d'affichage sur la carte du monde : phase 3.
 6. Formes de minicarte non rondes approximées comme carrées.
 7. Rotation de minicarte : non vérifiée en jeu ; icônes masquées si l'orientation est inaccessible.
-8. Identité des émetteurs vérifiée par comparaison avec `UnitFullName` des membres : les royaumes dont
-   le nom contient des espaces ou caractères spéciaux sont à vérifier en jeu (format « Nom-Royaume »).
+8. Identité des émetteurs vérifiée par comparaison avec les membres du groupe. Sur Forever (noms
+   régionaux, `RegionalUniqueNamesEnabled()`), l'identité est « Prénom Nom » : `UnitNameUnmodified`
+   renvoie (prénom, nom de famille) et l'émetteur reçu « Prénom Nom-Royaume » (constaté en jeu le
+   2026-10-15, corrigé en 0.1.1). Hypothèses non vérifiées en jeu : le royaume suit toujours le dernier
+   tiret de l'émetteur ; `RegionalUniqueNamesEnabled()` est déjà vrai au chargement de l'addon. La sonde
+   `identity.player` de `/pgr diag` permet de les contrôler. Royaumes classiques : « Nom-Royaume » via
+   `UnitFullName`.
 9. Aucune garantie de réception des messages (limitation inhérente à la messagerie d'addon).
 
 ## 5. Sources
 
 - Documentation d'API générée par Blizzard, branche Forever : `MinimapFrameAPIDocumentation.lua`,
-  `TooltipInfoDocumentation.lua`, `MinimapDocumentation.lua`, `Blizzard_Minimap/Mainline/Minimap.lua`
+  `TooltipInfoDocumentation.lua`, `MinimapDocumentation.lua`, `Blizzard_Minimap/Mainline/Minimap.lua`,
+  `UnitDocumentation.lua`, `Blizzard_FrameXMLUtil/Camelot/NameUtil.lua` (noms régionaux)
   — https://github.com/Gethe/wow-ui-source/tree/forever
 - Constantes de messagerie et restrictions 12.x (`ChatInfoDocumentation`, `ChatConstants`,
   `RestrictedActionsDocumentation`) — https://github.com/Gethe/wow-ui-source/tree/live

@@ -116,7 +116,8 @@ function Receiver.HandleAddonMessage(prefix, text, channel, sender)
 		return
 	end
 	if not IsVerifiedMember(fullName) then
-		return ns.Diagnostics.Reject("not_in_group", fullName)
+		-- émetteur brut ajouté quand il diffère de l'identité comparée : sert à vérifier le format des noms en jeu
+		return ns.Diagnostics.Reject("not_in_group", fullName == sender and fullName or (fullName .. " <- " .. sender))
 	end
 	local message, reason = ns.Protocol.Decode(text)
 	if not message then

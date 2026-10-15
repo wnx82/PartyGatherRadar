@@ -220,13 +220,20 @@ local KNOWN_EVENTS = {
 
 local ALLOWED_GLOBALS = { SLASH_PARTYGATHERRADAR1 = true, PartyGatherRadarDB = true }
 
---- opts : { name, realm, locale, hasAddon, mapID, x, y, inInstance, tracking }
+--- opts : { name, surname, realm, locale, hasAddon, mapID, x, y, inInstance, tracking }
+--- Avec world.regionalNames (noms régionaux de WoW Forever), l'émetteur des messages a la forme
+--- "Prénom Nom-Royaume", comme constaté en jeu le 2026-10-15 ("Aedot Wnx-ClassicBetaPvE2").
 function World:NewClient(opts)
 	local client = setmetatable({}, Client)
 	client.world = self
 	client.name = opts.name
+	client.surname = opts.surname
 	client.realm = opts.realm or "Realm"
-	client.fullName = client.name .. "-" .. client.realm
+	if self.regionalNames and client.surname then
+		client.fullName = client.name .. " " .. client.surname .. "-" .. client.realm
+	else
+		client.fullName = client.name .. "-" .. client.realm
+	end
 	client.locale = opts.locale or "frFR"
 	client.hasAddon = opts.hasAddon ~= false
 	client.mapID = opts.mapID or 1429
@@ -428,6 +435,32 @@ local function BuildEnvironment(client)
 		end
 		local other = client:UnitClient(unit)
 		return other and other.name or nil
+	end
+	if client.world.regionalNames ~= nil then
+		-- noms régionaux (Forever) : UnitName/UnitNameUnmodified renvoient (prénom, nom de famille), voir NameUtil.lua
+		-- (Camelot) de Blizzard ; world.joinedNames simule l'autre forme ("Prénom Nom", nil). UnitFullName garde le
+		-- comportement classique (prénom, royaume) : son comportement réel sur Forever n'est pas documenté.
+		local regional = client.world.regionalNames
+		api.RegionalUniqueNamesEnabled = function() return regional end
+		api.Constants = { CharacterNameSeparatorConsts = { CHARACTERNAME_SURNAME_SEPARATOR = " " } }
+		local function RegionalName(unit)
+			local target = unit == "player" and client or client:UnitClient(unit)
+			if not target then
+				return nil
+			end
+			if target.secretName then
+				return H.SECRET, H.SECRET
+			end
+			if not regional or not target.surname then
+				return target.name
+			end
+			if client.world.joinedNames then
+				return target.name .. " " .. target.surname, nil
+			end
+			return target.name, target.surname
+		end
+		api.UnitName = RegionalName
+		api.UnitNameUnmodified = RegionalName
 	end
 	api.UnitFullName = function(unit)
 		local target = unit == "player" and client or client:UnitClient(unit)

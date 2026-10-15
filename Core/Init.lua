@@ -5,7 +5,7 @@
 local addonName, ns = ...
 
 ns.ADDON_NAME = addonName or "PartyGatherRadar"
-ns.VERSION = "0.1.0"
+ns.VERSION = "0.1.1"
 ns.PREFIX = "PGRadar"            -- préfixe des messages d'addon (16 caractères maximum)
 ns.TARGET_INTERFACE = 16001       -- interface de la bêta WoW Forever ciblée
 ns.TARGET_BUILD = "1.60.1"
@@ -176,6 +176,14 @@ end
 
 ---------------------------------------------------------------------------
 -- Identité des joueurs
+--
+-- Deux formats coexistent :
+-- * royaumes classiques : identité "Nom-Royaume", le format de l'émetteur de CHAT_MSG_ADDON ;
+-- * noms régionaux uniques (WoW Forever, RegionalUniqueNamesEnabled()) : chaque personnage a un prénom et un
+--   nom de famille, uniques dans toute la région. UnitName et UnitNameUnmodified renvoient alors
+--   (prénom, nom de famille) et non (nom, royaume) : voir NameUtil.lua (Camelot) de Blizzard. L'émetteur
+--   reçu a la forme "Prénom Nom-Royaume" (constaté en jeu le 2026-10-15 : "Aedot Wnx-ClassicBetaPvE2").
+--   L'identité est alors "Prénom Nom", sans royaume.
 ---------------------------------------------------------------------------
 
 local function PlayerRealm()
@@ -186,10 +194,51 @@ local function PlayerRealm()
 	return realm
 end
 
---- Complète un nom en "Nom-Royaume" (format utilisé par CHAT_MSG_ADDON). Renvoie nil si le nom est inexploitable.
+--- Vrai si le client utilise les noms régionaux uniques (prénom et nom de famille).
+function ns.UsesRegionalNames()
+	if type(RegionalUniqueNamesEnabled) ~= "function" then
+		return false
+	end
+	local ok, enabled = pcall(RegionalUniqueNamesEnabled)
+	return ok and not ns.IsSecret(enabled) and enabled == true
+end
+
+--- Séparateur entre prénom et nom de famille (une espace si la constante du client est absente).
+function ns.SurnameSeparator()
+	local consts = Constants and Constants.CharacterNameSeparatorConsts
+	local separator = consts and consts.CHARACTERNAME_SURNAME_SEPARATOR
+	if not ns.IsSecret(separator) and type(separator) == "string" and separator ~= "" then
+		return separator
+	end
+	return " "
+end
+
+--- Identité "Prénom Nom" d'une unité avec les noms régionaux, ou nil si indisponible ou secrète.
+local function RegionalUnitName(unit)
+	local getName = UnitNameUnmodified or UnitName
+	if not getName then
+		return nil
+	end
+	local name, surname = getName(unit)
+	if ns.AnySecret(name, surname) or type(name) ~= "string" or name == "" then
+		return nil
+	end
+	-- le premier résultat peut déjà contenir le nom de famille (voir NameUtil.GetUnitFirstName de Blizzard)
+	if type(surname) == "string" and surname ~= "" then
+		return name .. ns.SurnameSeparator() .. surname
+	end
+	return name
+end
+
+--- Identité d'un émetteur de CHAT_MSG_ADDON, comparable à ns.UnitFullNameSafe. Renvoie nil si le nom est inexploitable.
+--- Royaumes classiques : complète en "Nom-Royaume". Noms régionaux : retire le royaume ("Prénom Nom").
 function ns.NormalizeName(name)
 	if ns.IsSecret(name) or type(name) ~= "string" or name == "" then
 		return nil
+	end
+	if ns.UsesRegionalNames() then
+		-- le royaume suit le dernier tiret : un nom de royaume normalisé n'en contient pas
+		return name:match("^(.+)%-[^%-]+$") or name
 	end
 	if name:find("-", 1, true) then
 		return name
@@ -201,8 +250,11 @@ function ns.NormalizeName(name)
 	return name
 end
 
---- Nom complet d'une unité ("Nom-Royaume") ou nil si indisponible ou secret.
+--- Identité d'une unité ("Nom-Royaume", ou "Prénom Nom" avec les noms régionaux) ou nil si indisponible ou secrète.
 function ns.UnitFullNameSafe(unit)
+	if ns.UsesRegionalNames() then
+		return RegionalUnitName(unit)
+	end
 	if not UnitFullName then
 		return nil
 	end
@@ -225,17 +277,21 @@ function ns.GetPlayerFullName()
 		return ns.playerFullName
 	end
 	local fullName = ns.UnitFullNameSafe("player")
-	-- avant PLAYER_LOGIN le royaume peut manquer : ne mettre en cache qu'un nom complet "Nom-Royaume"
-	if fullName and fullName:find("-", 1, true) then
+	-- avant PLAYER_LOGIN le royaume (ou le nom de famille) peut manquer : ne mettre en cache qu'une identité complète
+	local marker = ns.UsesRegionalNames() and ns.SurnameSeparator() or "-"
+	if fullName and fullName:find(marker, 1, true) then
 		ns.playerFullName = fullName
 	end
 	return fullName
 end
 
---- Nom sans royaume, pour l'affichage.
+--- Nom sans royaume, pour l'affichage. Une identité régionale ("Prénom Nom") n'a pas de royaume : gardée entière.
 function ns.ShortName(fullName)
 	if type(fullName) ~= "string" then
 		return "?"
+	end
+	if ns.UsesRegionalNames() then
+		return fullName
 	end
 	return fullName:match("^([^%-]+)") or fullName
 end

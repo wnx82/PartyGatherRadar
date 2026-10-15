@@ -59,10 +59,10 @@ return function(H, root)
 		H.eq(#peersA, 1)
 		H.eq(peersA[1].name, "Aedot-Realm")
 		H.eq(peersA[1].peer.compatible, true)
-		H.eq(peersA[1].peer.addonVersion, "0.1.0")
+		H.eq(peersA[1].peer.addonVersion, "0.1.1")
 		H.eq(#peersB, 1)
 		H.eq(peersB[1].name, "Aekiss-Realm")
-		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.1.0"), "annonce de découverte")
+		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.1.1"), "annonce de découverte")
 		H.eq(peersA[1].peer.messages, #b.sent, "un message compté une seule fois")
 		H.ok(#a.sent <= 2 and #b.sent <= 2, "au plus un HELLO et une réponse par client")
 		local before = #a.sent + #b.sent
@@ -609,5 +609,132 @@ return function(H, root)
 		local yards = 30 * 233.333 / 70
 		H.near(herb.x, 0.5 - yards / 3470, 0.0005, "à l'ouest")
 		H.near(herb.y, 0.5, 0.0005, "même latitude")
+	end)
+
+	---------------------------------------------------------------------------
+	H.suite("WoW Forever : noms régionaux (prénom et nom de famille)")
+	---------------------------------------------------------------------------
+	-- Constaté en jeu le 2026-10-15 : l'émetteur reçu était "Aedot Wnx-ClassicBetaPvE2" ; la version 0.1.0
+	-- rejetait l'autre membre (not_in_group) et ne reconnaissait pas son propre écho.
+
+	local REALM = "ClassicBetaPvE2"
+
+	local function RegionalGrouped(joinedNames)
+		local world = H.NewWorld(root)
+		world.regionalNames = true
+		world.joinedNames = joinedNames
+		local a = world:NewClient({ name = "Aekiss", surname = "Desbisous", realm = REALM,
+			tracking = { H.HERB_TRACKING, H.ORE_TRACKING } })
+		local b = world:NewClient({ name = "Aedot", surname = "Wnx", realm = REALM })
+		a:Login(false)
+		b:Login(false)
+		world:SetGroup({ a, b })
+		world:Advance(3)
+		return world, a, b
+	end
+
+	H.test("émetteurs « Prénom Nom-Royaume » reconnus : découverte mutuelle, échos ignorés", function()
+		local _, a, b = RegionalGrouped()
+		H.eq(a.ns.GetPlayerFullName(), "Aekiss Desbisous")
+		local peersA, peersB = a.ns.GroupSync.GetPeers(), b.ns.GroupSync.GetPeers()
+		H.eq(#peersA, 1, "Aedot connu d'Aekiss")
+		H.eq(peersA[1].name, "Aedot Wnx")
+		H.eq(#peersB, 1, "Aekiss connu d'Aedot")
+		H.eq(peersB[1].name, "Aekiss Desbisous")
+		H.eq(a.ns.Diagnostics.rejectReasons.not_in_group, nil, "aucun rejet chez Aekiss")
+		H.eq(b.ns.Diagnostics.rejectReasons.not_in_group, nil, "aucun rejet chez Aedot")
+		H.ok(a.ns.Diagnostics.counters.echoes >= 1, "écho reconnu")
+		H.ok(a:ChatContains("Aedot Wnx utilise PartyGatherRadar"), "annonce avec le nom complet")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("UnitName renvoie « Prénom Nom » en un seul résultat : même identité", function()
+		local _, a, b = RegionalGrouped(true)
+		H.eq(a.ns.GetPlayerFullName(), "Aekiss Desbisous")
+		H.eq(#a.ns.GroupSync.GetPeers(), 1)
+		H.eq(#b.ns.GroupSync.GetPeers(), 1)
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("/pgr test : PONG et marqueur TEST attribués au nom complet", function()
+		local world, a, b = RegionalGrouped()
+		a:Slash("test")
+		world:Advance(5.5)
+		H.ok(a:ChatContains("PONG reçu de Aedot Wnx"), "PONG reçu")
+		local realB, testB = b.ns.MarkerManager.Count()
+		H.eq(realB, 0, "aucune donnée réelle")
+		H.eq(testB, 1, "marqueur TEST reçu")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("même prénom, autre nom de famille : joueur hors groupe rejeté, membre accepté", function()
+		local _, a = RegionalGrouped()
+		local D = a.ns.Diagnostics
+		a:FireEvent("CHAT_MSG_ADDON", "PGRadar", "1;B", "PARTY", "Aedot Zorn-" .. REALM)
+		H.eq(D.rejectReasons.not_in_group, 1, "homonyme de prénom rejeté")
+		a:FireEvent("CHAT_MSG_ADDON", "PGRadar", "1;B", "PARTY", "Aedot-" .. REALM)
+		H.eq(D.rejectReasons.not_in_group, 2, "prénom seul rejeté")
+		H.eq(a.ns.GroupSync.GetPeers()[1].peer.sharing, true, "aucun BYE accepté jusque-là")
+		local log = table.concat(D.GetRecentLog(), "\n")
+		H.ok(log:find("Aedot Zorn <- Aedot Zorn-" .. REALM, 1, true), "émetteur brut journalisé")
+		a:FireEvent("CHAT_MSG_ADDON", "PGRadar", "1;B", "PARTY", "Aedot Wnx-" .. REALM)
+		H.eq(a.ns.GroupSync.GetPeers()[1].peer.sharing, false, "BYE du vrai membre accepté")
+		NoErrors(a)
+	end)
+
+	H.test("départ du groupe : le pair au nom complet est oublié", function()
+		local world, a, b = RegionalGrouped()
+		world:SetGroup({ a })
+		world:Advance(1)
+		H.eq(#a.ns.GroupSync.GetPeers(), 0)
+		H.eq(#b.ns.GroupSync.GetPeers(), 0)
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("normalisation : royaume retiré au dernier tiret, nom de famille gardé entier", function()
+		local _, a = RegionalGrouped()
+		local ns = a.ns
+		H.eq(ns.NormalizeName("Aedot Wnx-" .. REALM), "Aedot Wnx")
+		H.eq(ns.NormalizeName("Aedot Wnx-Foo-" .. REALM), "Aedot Wnx-Foo", "nom de famille avec tiret")
+		H.eq(ns.NormalizeName("Aedot Wnx"), "Aedot Wnx", "sans royaume")
+		H.eq(ns.NormalizeName(H.SECRET), nil, "valeur secrète")
+		H.eq(ns.ShortName("Aedot Wnx"), "Aedot Wnx", "affichage du nom complet")
+	end)
+
+	H.test("/pgr diag : rapport et identité sauvegardés sans le mode journal", function()
+		local world, a = RegionalGrouped()
+		H.eq(a.ns.Config.Get("debug"), false)
+		a:Slash("diag")
+		world:Advance(0.1)
+		local report = a.ns.db.diagnostics.lastReport
+		H.ok(type(report) == "table" and #report > 10, "rapport sauvegardé")
+		local text = table.concat(report, "\n")
+		H.ok(text:find("identity.player : INFO — identité « Aekiss Desbisous », noms régionaux : true", 1, true),
+			"sonde d'identité")
+		H.ok(text:find("UnitNameUnmodified : Aekiss / Desbisous", 1, true), "valeurs brutes du client")
+		H.ok(text:find("capacité sync : OUI", 1, true), "capacités")
+		H.ok(text:find("compteurs : ", 1, true), "compteurs")
+		H.ok(text:find("dernière erreur : aucune", 1, true), "dernière erreur")
+		NoErrors(a)
+	end)
+
+	H.test("RegionalUniqueNamesEnabled() faux : identités classiques « Nom-Royaume »", function()
+		local world = H.NewWorld(root)
+		world.regionalNames = false
+		local a = world:NewClient({ name = "Aekiss", surname = "Desbisous" })
+		local b = world:NewClient({ name = "Aedot", surname = "Wnx" })
+		a:Login(false)
+		b:Login(false)
+		world:SetGroup({ a, b })
+		world:Advance(3)
+		H.eq(a.ns.GetPlayerFullName(), "Aekiss-Realm")
+		H.eq(#a.ns.GroupSync.GetPeers(), 1)
+		H.eq(a.ns.GroupSync.GetPeers()[1].name, "Aedot-Realm")
+		NoErrors(a)
+		NoErrors(b)
 	end)
 end

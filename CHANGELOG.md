@@ -4,6 +4,30 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 [SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` (`## Version`) et
 `Core/Init.lua` (`ns.VERSION`).
 
+## [0.1.1] - 2026-10-15
+
+Correctif issu du premier essai en jeu à deux clients (journal d'Aedot du 2026-10-15).
+
+### Corrigé
+
+- Noms régionaux de WoW Forever (prénom et nom de famille) : l'émetteur reçu a la forme
+  `Prénom Nom-Royaume` (ex. `Aedot Wnx-ClassicBetaPvE2`), alors que l'identité était construite avec
+  `UnitFullName` (`Nom-Royaume`). Conséquence en 0.1.0 : chaque membre rejeté (`not_in_group`), propre écho
+  non reconnu, aucune découverte mutuelle. Quand `RegionalUniqueNamesEnabled()` est vrai, l'identité est
+  maintenant `Prénom Nom` (via `UnitNameUnmodified`, comme `NameUtil` de Blizzard) et le royaume est retiré
+  de l'émetteur. Les royaumes classiques gardent `Nom-Royaume`.
+
+### Ajouté
+
+- `/pgr diag` sauvegarde son rapport complet (sondes, capacités, compteurs, rejets, dernière erreur) dans
+  `PartyGatherRadarDB.diagnostics.lastReport`, même sans le mode journal.
+- Sonde `identity.player` : identité utilisée, mode des noms régionaux, valeurs brutes de `UnitFullName`
+  et `UnitNameUnmodified`.
+- Journal : rejet `not_in_group` avec l'émetteur brut quand il diffère de l'identité comparée ; ligne
+  « composition » quand la taille du groupe change.
+- Tests hors jeu (97) : simulation de clients Forever à noms régionaux (découverte, écho, PING/PONG,
+  homonymes de prénom, départ, normalisation, rapport de diagnostic).
+
 ## [0.1.0] - 2026-10-14
 
 Prototype des phases 0 (recherche et diagnostic) et 1 (prototype minimal). Non vérifié en jeu.

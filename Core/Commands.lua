@@ -98,9 +98,11 @@ end
 
 local function PrintDiagnostics()
 	PrintVersion()
-	ns.Diagnostics.PrintProbes(ns.Diagnostics.RunProbes())
+	local results = ns.Diagnostics.RunProbes()
+	ns.Diagnostics.PrintProbes(results)
 	ns.Diagnostics.PrintCapabilities()
 	ns.Diagnostics.PrintCounters()
+	ns.Diagnostics.SaveReport(results)
 end
 
 ---------------------------------------------------------------------------

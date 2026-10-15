@@ -40,7 +40,8 @@ Diagnostics.lastProbe = nil
 
 local memoryLog = {}
 local memoryLogFirst, memoryLogCount = 1, 0
-local persistedLog -- table des SavedVariables, attachée par Config
+local persistedStorage -- table diagnostics des SavedVariables, attachée par Config
+local persistedLog -- persistedStorage.log
 
 ---------------------------------------------------------------------------
 -- Journal
@@ -98,6 +99,10 @@ function Diagnostics.AttachStorage(storage)
 	if type(storage.log) ~= "table" then
 		storage.log = {}
 	end
+	if storage.lastReport ~= nil and type(storage.lastReport) ~= "table" then
+		storage.lastReport = nil
+	end
+	persistedStorage = storage
 	persistedLog = storage.log
 end
 
@@ -182,6 +187,14 @@ local function ProbeExistence(results, paths)
 	for _, path in ipairs(paths) do
 		Add(results, path, Exists(path) and Diagnostics.OK or Diagnostics.ABSENT)
 	end
+end
+
+--- Texte affichable d'une valeur du client : une valeur secrète n'est ni convertie ni comparée.
+local function Readable(value)
+	if ns.IsSecret(value) then
+		return "<secret>"
+	end
+	return tostring(value)
 end
 
 local function ProbeLive(results, id, fn)
@@ -276,6 +289,22 @@ function Diagnostics.RunProbes()
 	ProbeLive(results, "comm.channel", function()
 		local channel = ns.Sender and ns.Sender.GetChannel()
 		return channel and Diagnostics.OK or Diagnostics.UNAVAILABLE, channel or "pas de groupe"
+	end)
+	ProbeLive(results, "identity.player", function()
+		-- valeurs brutes du client, à comparer avec l'émetteur des messages reçus (noms régionaux de Forever)
+		local fullName, fullRealm, name, surname
+		if UnitFullName then
+			fullName, fullRealm = UnitFullName("player")
+		end
+		local getName = UnitNameUnmodified or UnitName
+		if getName then
+			name, surname = getName("player")
+		end
+		local identity = ns.GetPlayerFullName()
+		return identity and Diagnostics.INFO or Diagnostics.UNAVAILABLE,
+			format("identité « %s », noms régionaux : %s, UnitFullName : %s / %s, UnitNameUnmodified : %s / %s",
+				Readable(identity), tostring(ns.UsesRegionalNames()), Readable(fullName), Readable(fullRealm),
+				Readable(name), Readable(surname))
 	end)
 
 	-- Localisation
@@ -521,4 +550,45 @@ function Diagnostics.PrintCounters()
 	else
 		ns.Print("  " .. ns.T("DIAG_NO_ERROR"))
 	end
+end
+
+--- Copie le rapport de /pgr diag (sondes, capacités, compteurs) dans les SavedVariables, champ
+--- diagnostics.lastReport, sans couleurs. Écrit même sans le mode journal : le fichier peut être joint à un
+--- rapport de test après /reload.
+function Diagnostics.SaveReport(results)
+	if not persistedStorage then
+		return
+	end
+	local build = Diagnostics.GetBuild()
+	local lines = {
+		format("[%.1f] PartyGatherRadar %s, client %s (%s) interface %s", ns.Now(), ns.VERSION,
+			tostring(build.version), tostring(build.build), tostring(build.toc)),
+	}
+	for _, r in ipairs(results or {}) do
+		if r.detail then
+			lines[#lines + 1] = format("%s : %s — %s", r.id, r.status, tostring(r.detail))
+		else
+			lines[#lines + 1] = format("%s : %s", r.id, r.status)
+		end
+	end
+	local caps = Diagnostics.GetCapabilities()
+	for _, key in ipairs({ "localDetection", "location", "sync", "minimap" }) do
+		lines[#lines + 1] = format("capacité %s : %s — %s", key, caps[key].status, tostring(caps[key].detail))
+	end
+	local counters = {}
+	for name, count in pairs(Diagnostics.counters) do
+		counters[#counters + 1] = format("%s=%d", name, count)
+	end
+	table.sort(counters)
+	lines[#lines + 1] = "compteurs : " .. table.concat(counters, ", ")
+	local reasons = {}
+	for reason, count in pairs(Diagnostics.rejectReasons) do
+		reasons[#reasons + 1] = format("%s=%d", reason, count)
+	end
+	table.sort(reasons)
+	lines[#lines + 1] = "rejets : " .. (#reasons > 0 and table.concat(reasons, ", ") or "aucun")
+	local lastError = Diagnostics.lastError
+	lines[#lines + 1] = lastError and format("dernière erreur : %s : %s", lastError.source, lastError.message)
+		or "dernière erreur : aucune"
+	persistedStorage.lastReport = lines
 end

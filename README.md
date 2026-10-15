@@ -3,10 +3,11 @@
 Addon pour **World of Warcraft: Forever** (bêta 1.60.1, interface 16001) : partager en temps réel,
 entre membres d'un groupe, les ressources de récolte (herbes, minerais) détectées sur la minicarte.
 
-> **État : prototype 0.1.0 (phases 0 et 1).** L'infrastructure (protocole réseau, découverte des
+> **État : prototype 0.1.1 (phases 0 et 1).** L'infrastructure (protocole réseau, découverte des
 > membres, couche d'icônes sur la minicarte, diagnostics, sondes de détection) est en place et testée
-> hors jeu. Le partage automatique des plantes détectées arrive en phase 2/3. **Rien n'a encore été
-> vérifié dans un client WoW réel** : voir [Tests/TestPlan.md](Tests/TestPlan.md).
+> hors jeu. Le partage automatique des plantes détectées arrive en phase 2/3. **Presque rien n'a encore
+> été vérifié dans un client WoW réel** : le premier essai à deux (0.1.0) a révélé le format des noms de
+> Forever, corrigé en 0.1.1. Voir [Tests/TestPlan.md](Tests/TestPlan.md).
 
 ## Objectif
 
@@ -30,7 +31,7 @@ externe, aucune automatisation de déplacement, d'interaction ou de récolte, au
 artificiellement chez un joueur qui ne le possède pas. Aucune position n'est inventée : sans donnée
 fiable, rien n'est affiché.
 
-## Fonctionnalités de la version 0.1.0
+## Fonctionnalités de la version 0.1.1
 
 Réellement implémenté :
 
@@ -39,13 +40,15 @@ Réellement implémenté :
 - protocole réseau versionné (préfixe `PGRadar`) : HELLO, BYE, PING/PONG, NODE, REMOVE ;
   validation stricte, messages ≤ 255 octets, aucun canal public ;
 - découverte des autres clients, compatibilité de protocole, nettoyage au départ d'un membre ;
+  identité « Prénom Nom » avec les noms régionaux de Forever, « Nom-Royaume » ailleurs ;
 - file d'envoi avec limitation de fréquence, regroupement, gestion des refus (limitation,
   verrouillage de la messagerie) ;
 - marqueurs avec statuts **détection récente** (vert), **incertaine** (gris), **position historique**
   (discret), **TEST** (bleu, fictif) ; déduplication à 5 m ; expiration configurable ;
 - couche d'icônes sur la minicarte : déplacements, zoom, changements de carte, rotation si
   l'orientation est accessible, infobulle détaillée ;
-- diagnostics : sondes d'API, matrice de capacités, compteurs, journal sauvegardable ;
+- diagnostics : sondes d'API, matrice de capacités, compteurs, journal sauvegardable ; rapport de
+  `/pgr diag` sauvegardé dans `diagnostics.lastReport` ;
 - sondes de détection : lecture de l'infobulle de minicarte au survol, balayage expérimental ;
 - test contrôlé `/pgr test` (données marquées TEST, jamais mélangées aux détections réelles) ;
 - isolation des erreurs : un module défaillant est désactivé sans arrêter les autres ;
@@ -59,7 +62,7 @@ fenêtre de paramètres à onglets et bouton de minicarte (phase 4).
 
 Chemin cible : `World of Warcraft\_classic_beta_\Interface\AddOns\PartyGatherRadar\`
 
-**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.1.0.zip` dans le dossier `AddOns` ; le ZIP
+**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.1.1.zip` dans le dossier `AddOns` ; le ZIP
 contient déjà le dossier `PartyGatherRadar\`. Vérifier que le chemin final est
 `AddOns\PartyGatherRadar\PartyGatherRadar.toc` (et non `AddOns\PartyGatherRadar\PartyGatherRadar\…`).
 
@@ -94,7 +97,7 @@ n'est nécessaire.
 ## Premier essai à deux
 
 1. Installer l'addon chez les deux joueurs, se grouper.
-2. Chacun voit « <autre> utilise PartyGatherRadar 0.1.0 ». Sinon : `/pgr status` et `/pgr diag`.
+2. Chacun voit « <autre> utilise PartyGatherRadar 0.1.1 ». Sinon : `/pgr status` et `/pgr diag`.
 3. Aekiss tape `/pgr test` : un marqueur bleu TEST apparaît chez les deux, au même endroit du terrain,
    et Aekiss lit « PONG reçu de Aedot ».
 4. Aekiss, Découverte d'herbes active : `/pgr probe scan` ; les marqueurs « [Sonde] » doivent

@@ -1,11 +1,12 @@
-# Plan de tests — PartyGatherRadar 0.1.0
+# Plan de tests — PartyGatherRadar 0.1.1
 
 Deux niveaux de tests :
 
 1. **Tests automatisés hors jeu** : Lua 5.1 + bouchons de l'API WoW + simulation de plusieurs clients
    reliés par un faux réseau. Ils valident la logique de l'addon contre le comportement *documenté*.
 2. **Tests en jeu** : seuls capables de valider le comportement réel du client Forever.
-   **Aucun n'a encore été exécuté** : leur statut est « Non exécuté » tant qu'un rapport n'a pas été fourni.
+   Statut « Non exécuté » tant qu'un rapport n'a pas été fourni. Premier essai à deux clients le
+   2026-10-15 en 0.1.0 : voir le scénario 1.
 
 ## 1. Tests automatisés
 
@@ -29,6 +30,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | Gestion des versions | Version future illisible signalée, HELLO futur toujours lisible, compatibilité min/max |
 | Expiration des marqueurs | Récente → incertaine (60 s) → supprimée (300 s), âge transmis, TEST (120 s), historique sans expiration |
 | Messages invalides | Types, tailles, champs, énumérations, noms avec `|`, incohérences TEST, émetteur hors groupe, canaux interdits, valeurs secrètes |
+| Identité des joueurs | Noms régionaux de Forever (« Prénom Nom-Royaume ») : découverte, écho, PING/PONG, homonymes de prénom, départ, normalisation ; mode classique « Nom-Royaume » |
 | Changements de groupe | Départ d'un membre, dissolution du groupe, BYE, /reload, membre sans addon, raid |
 | Séparation simulé / réel | Magasins séparés, mélanges refusés, pas de fusion TEST/réel, sonde de calibration en TEST uniquement |
 | Robustesse | Module en erreur désactivé seul (rafale de 3 erreurs en 60 s), événement inconnu refusé sans erreur, écouteur retiré pendant la répartition, échec de conversion de carte retenté, toutes les commandes `/pgr`, client anglais |
@@ -39,7 +41,8 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 
 | Date | Interpréteur | Résultat |
 |---|---|---|
-| 2026-10-14 | Lua 5.1 embarqué (lupa) | 89 réussis, 0 échec |
+| 2026-10-14 | Lua 5.1 embarqué (lupa) | 89 réussis, 0 échec (0.1.0) |
+| 2026-10-15 | Lua 5.1 embarqué (lupa) | 97 réussis, 0 échec (0.1.1) |
 
 ## 2. Tests en jeu
 
@@ -58,6 +61,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 |---|---|---|
 | `/pgr version` | 1.60.1, build ≥ 70374, interface 16001, WoW Forever : oui | Non exécuté |
 | `/pgr diag` | Aucune `ERREUR` ; `detection.minimapProbeApi` = ATTENTION (disponible) ; localisation fiable = OUI en extérieur | Non exécuté |
+| `/pgr diag` : ligne `identity.player` | Identité « Prénom Nom » (ex. « Aedot Wnx »), noms régionaux : true ; rapport copié dans `diagnostics.lastReport` après `/reload` | Non exécuté |
 | Aekiss : `/pgr probe tracking` | Découverte d'herbes listée (active ou non) | Non exécuté |
 | Aekiss, pistage herbes actif, `/pgr probe minimap` puis survol d'un point | Nom de la plante affiché, position plausible | Non exécuté |
 | Aekiss : `/pgr probe scan` hors combat, souris hors de la minicarte | Marqueurs « [Sonde] … » **superposés** aux points natifs (capture d'écran), aucun clignotement d'infobulle | Non exécuté |
@@ -70,10 +74,15 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 
 | Étape | Résultat attendu | Statut |
 |---|---|---|
-| Aekiss invite Aedot | Chez chacun : « <autre> utilise PartyGatherRadar 0.1.0 (protocole 1) » en quelques secondes | Non exécuté |
+| Aekiss invite Aedot | Chez chacun : « <autre> utilise PartyGatherRadar 0.1.1 (protocole 1) » en quelques secondes | **Échec en 0.1.0** (2026-10-15), corrigé en 0.1.1, à refaire |
 | `/pgr peers` chez les deux | L'autre listé, compatible, capacités cohérentes | Non exécuté |
 | `/pgr status` | B. synchronisation = OUI (message valide reçu) | Non exécuté |
 | `/pgr test` chez Aekiss | Marqueur TEST local à ~21 m au nord-est ; « PONG reçu de Aedot en N ms » ; marqueur TEST chez Aedot | Non exécuté |
+
+Essai du 2026-10-15 (0.1.0, journal d'Aedot) : HELLO envoyé, messages d'Aekiss bien reçus, mais rejetés
+(`not_in_group`) ; propre écho non reconnu. Cause : sur Forever, l'émetteur a la forme `Prénom Nom-Royaume`
+(`Aedot Wnx-ClassicBetaPvE2`) alors que l'identité venait de `UnitFullName`. Corrigé en 0.1.1 (identité
+« Prénom Nom »). À refaire avec 0.1.1 installée **sur les deux PC**, `/pgr debug` actif chez les deux.
 
 ### Scénario 2 — Détections accessibles à chacun
 
@@ -84,7 +93,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 
 ### Scénario 3 — Transmission d'une plante (phase 3)
 
-Le partage automatique des détections réelles n'existe pas en 0.1.0. Vérifiable aujourd'hui :
+Le partage automatique des détections réelles n'existe pas en 0.1.1. Vérifiable aujourd'hui :
 `/pgr test` (marqueur TEST) et l'alignement des marqueurs reçus avec la position réelle.
 
 | Étape | Résultat attendu | Statut |

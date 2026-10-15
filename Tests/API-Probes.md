@@ -40,6 +40,7 @@ produit `ABSENT` ou `ERREUR`, jamais une erreur Lua.
 | `comm.lockdown` | `C_ChatInfo.InChatMessagingLockdown()` | OK (libre) hors rencontre ; à relever en donjon |
 | `comm.realmRestricted` | `AreOutgoingAddonChatMessagesRestricted()` | INFO (peu fiable selon d'autres auteurs) |
 | `comm.channel` | Canal de groupe choisi | PARTY en groupe, INDISPONIBLE seul |
+| `identity.player` | Identité comparée aux émetteurs, `RegionalUniqueNamesEnabled()`, valeurs brutes de `UnitFullName` et `UnitNameUnmodified` | INFO : sur Forever, identité « Prénom Nom », noms régionaux : true |
 | `map.player` | Carte et position du joueur | OK en extérieur, INDISPONIBLE (instance) en donjon |
 | `map.size` | Dimensions de la carte (m) | OK |
 | `map.roundtrip` | Carte → monde → carte, écart < 0,0005 | OK |
@@ -67,8 +68,10 @@ produit `ABSENT` ou `ERREUR`, jamais une erreur Lua.
 
 1. `/pgr debug` (activer le journal sauvegardé), puis `/pgr diag`, `/pgr probe tracking`, `/pgr probe scan`
    près de quelques plantes avec Découverte d'herbes active.
-2. `/reload` pour écrire les SavedVariables.
-3. Joindre `WTF\Account\<compte>\SavedVariables\PartyGatherRadar.lua` (champ `diagnostics.log`) et une
+2. `/reload` pour écrire les SavedVariables (le jeu ne les écrit qu'au `/reload`, à la déconnexion ou à
+   une fermeture normale : rien après un plantage).
+3. Joindre `WTF\Account\<compte>\SavedVariables\PartyGatherRadar.lua` (champs `diagnostics.lastReport`,
+   rapport du dernier `/pgr diag` sauvegardé même sans `/pgr debug`, et `diagnostics.log`) et une
    capture de la minicarte montrant les marqueurs « [Sonde] » superposés (ou non) aux points natifs.
    Ce fichier ne contient ni mot de passe ni identifiant de compte, mais il contient des noms de
    personnages : relisez-le avant de le partager.

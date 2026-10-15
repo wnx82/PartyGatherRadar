@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: PartyGatherRadar
-## Notes: Partage en groupe des ressources de récolte (herbes, minerais) détectées sur la minicarte. Prototype 0.1.0 pour WoW Forever.
+## Notes: Partage en groupe des ressources de récolte (herbes, minerais) détectées sur la minicarte. Prototype 0.1.1 pour WoW Forever.
 ## Author: Christophe Vandermeulen
-## Version: 0.1.0
+## Version: 0.1.1
 ## SavedVariables: PartyGatherRadarDB
 ## IconTexture: Interface\Icons\INV_Misc_Flower_02
 ## X-Target-Build: 1.60.1
