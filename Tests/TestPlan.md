@@ -1,4 +1,4 @@
-# Plan de tests — PartyGatherRadar 0.3.0
+# Plan de tests — PartyGatherRadar 0.3.1
 
 Deux niveaux de tests :
 
@@ -48,6 +48,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 97 réussis, 0 échec (0.1.1) |
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 106 réussis, 0 échec (0.2.0) |
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 122 réussis, 0 échec (0.3.0) |
+| 2026-10-15 | Lua 5.1 embarqué (lupa) | 123 réussis, 0 échec (0.3.1) |
 
 ## 2. Tests en jeu
 
@@ -108,7 +109,7 @@ vérifient l'alignement avec le marqueur TEST de `/pgr test`.
 |---|---|---|
 | Les deux personnages côte à côte, `/pgr test` chez Aekiss | Le marqueur TEST apparaît au même endroit sur les deux minicartes | Partiel (2026-10-15) : côte à côte (4 m), test lancé par Aedot, marqueur reçu par Aekiss ; position à l'écran non rapportée (pas de capture) |
 | Aedot à 50 m d'Aekiss | Le marqueur reste au même endroit du terrain (décalé sur la minicarte d'Aedot) | Non exécuté |
-| Survol du marqueur chez Aedot | Infobulle : Nom, Type Test, Détecté par Aekiss, État TEST, Dernière détection, Distance | Non exécuté |
+| Survol du marqueur chez Aedot | Infobulle : titre « Marqueur TEST », Type Test, Détecté par Aekiss, État TEST, Dernière détection, Distance | Non exécuté |
 
 ### Scénario 4 — Déplacements et incertitude
 
@@ -151,9 +152,9 @@ vérifient l'alignement avec le marqueur TEST de `/pgr test`.
 | Étape | Résultat attendu | Statut |
 |---|---|---|
 | Connexion | Bouton (icône de fleur) sur le bord de la minicarte, en bas à gauche | Non exécuté |
-| Survol du bouton | Infobulle : « PartyGatherRadar 0.3.0 », membres du groupe et nombre avec l'addon | Non exécuté |
+| Survol du bouton | Infobulle : « PartyGatherRadar 0.3.1 », membres du groupe et nombre avec l'addon | Non exécuté |
 | Glisser le bouton, `/reload` | Le bouton suit le bord de la minicarte et garde sa place après `/reload` | Non exécuté |
-| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.3.0 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
+| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.3.1 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
 | Aedot `/pgr test`, Aekiss décoche « Afficher les infos des autres joueurs » | Le marqueur TEST d'Aedot disparaît de la minicarte d'Aekiss, puis revient quand la case est recochée | Non exécuté |
 | Décocher « Bouton autour de la minicarte » | Bouton masqué ; `/pgr` rouvre la fenêtre ; `/pgr button on` le réaffiche | Non exécuté |
 
@@ -162,7 +163,7 @@ vérifient l'alignement avec le marqueur TEST de `/pgr test`.
 | Étape | Résultat attendu | Statut |
 |---|---|---|
 | Aekiss, Découverte d'herbes active, côte à côte avec Aedot près de plantes | En quelques secondes, chez Aedot : une icône verte par plante, au même endroit que le point natif chez Aekiss (captures des deux minicartes) | Non exécuté |
-| Survol d'une icône chez Aedot | Nom de la plante, « Détecté par Aekiss », état « Détection récente » | Non exécuté |
+| Survol d'une icône chez Aedot | Titre : le nom de la plante (plus « PartyGatherRadar »), « Détecté par : Aekiss », état « Détection récente » | Non exécuté |
 | Zone de quête active sur la minicarte | Aucune icône pour la quête ni pour les joueurs ; journal d'Aekiss : « nom ignoré » une fois par nom | Non exécuté |
 | Aekiss récolte une plante | L'icône disparaît chez Aedot en ~4 s | Non exécuté |
 | Aekiss court (monture) dans une zone riche en plantes | Icônes chez Aedot sans doublons, images par seconde d'Aekiss normales, infobulle native sans clignotement | Non exécuté |

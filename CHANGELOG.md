@@ -4,6 +4,14 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 [SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` (`## Version`) et
 `Core/Init.lua` (`ns.VERSION`).
 
+## [0.3.1] - 2026-10-15
+
+### Modifié
+
+- Infobulle des icônes sur la minicarte : le nom de la ressource (« Pacifique ») sert de titre, dans la
+  couleur de son statut, à la place de « PartyGatherRadar » ; la ligne « Nom » n'est plus répétée. Si le
+  nom est absent ou masqué (`showTooltipName`), le titre de l'addon revient.
+
 ## [0.3.0] - 2026-10-15
 
 Phases 2 et 3 (cœur) : l'addon fonctionne seul, sans commande. Testé hors jeu, pas encore vérifié en jeu.

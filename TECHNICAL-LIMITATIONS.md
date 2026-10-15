@@ -1,6 +1,6 @@
 # PartyGatherRadar — Faisabilité et limitations techniques
 
-Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-10-15 pour la version 0.3.0.
+Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-10-15 pour la version 0.3.1.
 
 Légende des niveaux de confiance :
 
@@ -138,7 +138,7 @@ développé en phase 2/3, clairement séparé des détections actives.
 - Les icônes peuvent recouvrir des points natifs (quêtes) : taille 14 px et transparence 0,9 par défaut,
   réglables.
 
-## 4. Limitations connues de la version 0.3.0
+## 4. Limitations connues de la version 0.3.1
 
 1. Détection automatique **non vérifiée en jeu** : précision à distance, coût en images par seconde,
    effet éventuel sur l'infobulle native (le sondage s'arrête quand la souris survole la minicarte).
