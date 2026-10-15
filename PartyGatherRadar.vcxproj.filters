@@ -1,0 +1,106 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Communication">
+      <UniqueIdentifier>{0B8C3E9A-1C21-4C55-9E0B-6A1F2C3D4E04}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{0B8C3E9A-1C21-4C55-9E0B-6A1F2C3D4E01}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Detection">
+      <UniqueIdentifier>{0B8C3E9A-1C21-4C55-9E0B-6A1F2C3D4E03}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Localization">
+      <UniqueIdentifier>{0B8C3E9A-1C21-4C55-9E0B-6A1F2C3D4E02}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Map">
+      <UniqueIdentifier>{0B8C3E9A-1C21-4C55-9E0B-6A1F2C3D4E05}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Tests">
+      <UniqueIdentifier>{0B8C3E9A-1C21-4C55-9E0B-6A1F2C3D4E06}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Tools">
+      <UniqueIdentifier>{0B8C3E9A-1C21-4C55-9E0B-6A1F2C3D4E07}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="PartyGatherRadar.toc" />
+    <None Include="CHANGELOG.md" />
+    <None Include="README.md" />
+    <None Include="TECHNICAL-LIMITATIONS.md" />
+    <None Include="LICENSE" />
+    <None Include=".gitignore" />
+    <None Include="Core\Commands.lua">
+      <Filter>Core</Filter>
+    </None>
+    <None Include="Core\Config.lua">
+      <Filter>Core</Filter>
+    </None>
+    <None Include="Core\Diagnostics.lua">
+      <Filter>Core</Filter>
+    </None>
+    <None Include="Core\Events.lua">
+      <Filter>Core</Filter>
+    </None>
+    <None Include="Core\Init.lua">
+      <Filter>Core</Filter>
+    </None>
+    <None Include="Localization\enUS.lua">
+      <Filter>Localization</Filter>
+    </None>
+    <None Include="Localization\frFR.lua">
+      <Filter>Localization</Filter>
+    </None>
+    <None Include="Detection\Coordinates.lua">
+      <Filter>Detection</Filter>
+    </None>
+    <None Include="Detection\Tracking.lua">
+      <Filter>Detection</Filter>
+    </None>
+    <None Include="Communication\GroupSync.lua">
+      <Filter>Communication</Filter>
+    </None>
+    <None Include="Communication\Protocol.lua">
+      <Filter>Communication</Filter>
+    </None>
+    <None Include="Communication\Receiver.lua">
+      <Filter>Communication</Filter>
+    </None>
+    <None Include="Communication\Sender.lua">
+      <Filter>Communication</Filter>
+    </None>
+    <None Include="Map\MarkerManager.lua">
+      <Filter>Map</Filter>
+    </None>
+    <None Include="Map\MinimapOverlay.lua">
+      <Filter>Map</Filter>
+    </None>
+    <None Include="Tests\Harness.lua">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="Tests\ProtocolTests.lua">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="Tests\SyncSimulationTests.lua">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="Tests\run.lua">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="Tests\API-Probes.md">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="Tests\TestPlan.md">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="Tools\package.ps1">
+      <Filter>Tools</Filter>
+    </None>
+    <None Include="Tools\run-tests.ps1">
+      <Filter>Tools</Filter>
+    </None>
+    <None Include="Tools\run-tests.py">
+      <Filter>Tools</Filter>
+    </None>
+  </ItemGroup>
+</Project>

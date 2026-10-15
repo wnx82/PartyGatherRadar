@@ -1,0 +1,20 @@
+# Visual Studio
+.vs/
+*.user
+x64/
+x86/
+Win32/
+Debug/
+Release/
+*.tlog
+*.log
+
+# Sorties d'empaquetage
+dist/
+
+# Environnement de test (Python + lupa)
+Tools/.venv/
+__pycache__/
+
+# Claude Code (état local)
+.claude/scheduled_tasks.lock

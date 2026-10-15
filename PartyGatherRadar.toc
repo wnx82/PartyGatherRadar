@@ -1,0 +1,25 @@
+## Interface: 16001
+## Title: PartyGatherRadar
+## Notes: Partage en groupe des ressources de récolte (herbes, minerais) détectées sur la minicarte. Prototype 0.1.0 pour WoW Forever.
+## Author: Christophe Vandermeulen
+## Version: 0.1.0
+## SavedVariables: PartyGatherRadarDB
+## IconTexture: Interface\Icons\INV_Misc_Flower_02
+## X-Target-Build: 1.60.1
+## X-License: MIT
+
+Core\Init.lua
+Localization\frFR.lua
+Localization\enUS.lua
+Core\Diagnostics.lua
+Core\Events.lua
+Core\Config.lua
+Detection\Coordinates.lua
+Detection\Tracking.lua
+Communication\Protocol.lua
+Map\MarkerManager.lua
+Communication\Sender.lua
+Communication\GroupSync.lua
+Communication\Receiver.lua
+Map\MinimapOverlay.lua
+Core\Commands.lua
