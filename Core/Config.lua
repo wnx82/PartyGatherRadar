@@ -21,6 +21,10 @@ Config.DEFAULTS = {
 	allowRaid = true,           -- canal RAID en raid (expérimental)
 	allowInstanceChat = false,  -- canal INSTANCE_CHAT en groupe de recherche (expérimental)
 
+	-- Détection automatique (pistage actif, minicarte sondée toutes les 2 s)
+	autoDetect = true,
+	showOwnDetections = false,  -- nos détections sur notre minicarte (contrôle de la superposition)
+
 	-- Ressources
 	showHerbs = true,
 	showOres = true,
@@ -40,6 +44,10 @@ Config.DEFAULTS = {
 		test = { r = 0.30, g = 0.60, b = 1.00 },
 	},
 
+	-- Bouton autour de la minicarte (ouvre la fenêtre de réglages)
+	showMinimapButton = true,
+	minimapButtonAngle = 225,   -- degrés, 0 = est, sens trigonométrique (225 = en bas à gauche)
+
 	-- Durées (secondes)
 	liveTTL = 60,        -- détection considérée récente
 	uncertainTTL = 240,  -- durée supplémentaire en état incertain avant suppression
@@ -56,6 +64,7 @@ local NUMERIC_BOUNDS = {
 	liveTTL = { 10, 900 },
 	uncertainTTL = { 0, 3600 },
 	testTTL = { 10, 600 },
+	minimapButtonAngle = { 0, 360 },
 }
 
 local function SanitizeColor(color, fallback)

@@ -159,12 +159,16 @@
     <None Include="Localization\frFR.lua" />
     <None Include="Detection\Coordinates.lua" />
     <None Include="Detection\Tracking.lua" />
+    <None Include="Detection\ResourceNames.lua" />
+    <None Include="Detection\AutoDetect.lua" />
     <None Include="Communication\GroupSync.lua" />
     <None Include="Communication\Protocol.lua" />
     <None Include="Communication\Receiver.lua" />
     <None Include="Communication\Sender.lua" />
     <None Include="Map\MarkerManager.lua" />
     <None Include="Map\MinimapOverlay.lua" />
+    <None Include="UI\MinimapButton.lua" />
+    <None Include="UI\SettingsPanel.lua" />
     <None Include="Tests\Harness.lua" />
     <None Include="Tests\ProtocolTests.lua" />
     <None Include="Tests\SyncSimulationTests.lua" />

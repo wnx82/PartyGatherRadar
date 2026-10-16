@@ -53,6 +53,7 @@ produit `ABSENT` ou `ERREUR`, jamais une erreur Lua.
 | `detection.minimapProbeApi` | `SetUsingSoftCursor`, `UpdateMouseoverAtPoint`, `GetMinimapMouseover` | ATTENTION : disponible (expérimental) |
 | `detection.minimapTooltip` | Une infobulle de minicarte a été lue | INFO tant que la sonde n'a rien lu |
 | `detection.minimapScan` | Résultat du dernier balayage | INFO tant que `/pgr probe scan` n'a pas été lancé |
+| `detection.auto` | Détection automatique : balayages, interruptions (dernier motif), ressources suivies, trouvées, disparues, noms ignorés | INFO si active, ATTENTION si désactivée |
 | `detection.vignettes` | Nombre de vignettes visibles | INFO |
 
 ## Matrice de capacités (`/pgr diag`, `/pgr status`)

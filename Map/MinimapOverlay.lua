@@ -72,9 +72,17 @@ local function ShowTooltip(pin)
 		return
 	end
 	GameTooltip:SetOwner(pin, "ANCHOR_RIGHT")
-	GameTooltip:AddLine(status == "TEST" and ns.T("TOOLTIP_TITLE_TEST") or ns.T("TOOLTIP_TITLE"), 0.2, 1, 0.6)
-	if ns.Config.Get("showTooltipName") then
-		TooltipLine("TT_NAME", (marker.name and marker.name ~= "") and marker.name or ns.T("UNKNOWN"))
+	-- titre : le nom de la ressource (« Pacifique »), dans la couleur de son statut ; nom absent ou masqué
+	-- par le réglage showTooltipName : titre de l'addon et ligne « Nom » comme avant
+	local hasName = type(marker.name) == "string" and marker.name ~= ""
+	if ns.Config.Get("showTooltipName") and hasName then
+		local color = ns.Config.Get("colors")[STATUS_COLOR_KEY[status]]
+		GameTooltip:AddLine(marker.name, color.r, color.g, color.b)
+	else
+		GameTooltip:AddLine(status == "TEST" and ns.T("TOOLTIP_TITLE_TEST") or ns.T("TOOLTIP_TITLE"), 0.2, 1, 0.6)
+		if ns.Config.Get("showTooltipName") then
+			TooltipLine("TT_NAME", ns.T("UNKNOWN"))
+		end
 	end
 	TooltipLine("TT_KIND", ns.T("KIND_" .. marker.kind))
 	if ns.Config.Get("showTooltipReporter") then
@@ -196,6 +204,10 @@ end
 local function PassesFilters(marker, status)
 	-- réception désactivée : les marqueurs déjà reçus sont masqués aussi (seuls les locaux restent)
 	if not marker.isLocal and not ns.Config.Get("receiveEnabled") then
+		return false
+	end
+	-- nos propres détections recouvriraient les points natifs de notre minicarte : masquées par défaut
+	if marker.isLocal and marker.source == "LIVE" and not ns.Config.Get("showOwnDetections") then
 		return false
 	end
 	if marker.kind == "HERB" and not ns.Config.Get("showHerbs") then

@@ -22,6 +22,9 @@
     <Filter Include="Tools">
       <UniqueIdentifier>{0B8C3E9A-1C21-4C55-9E0B-6A1F2C3D4E07}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{0B8C3E9A-1C21-4C55-9E0B-6A1F2C3D4E08}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="PartyGatherRadar.toc" />
@@ -57,6 +60,12 @@
     <None Include="Detection\Tracking.lua">
       <Filter>Detection</Filter>
     </None>
+    <None Include="Detection\ResourceNames.lua">
+      <Filter>Detection</Filter>
+    </None>
+    <None Include="Detection\AutoDetect.lua">
+      <Filter>Detection</Filter>
+    </None>
     <None Include="Communication\GroupSync.lua">
       <Filter>Communication</Filter>
     </None>
@@ -74,6 +83,12 @@
     </None>
     <None Include="Map\MinimapOverlay.lua">
       <Filter>Map</Filter>
+    </None>
+    <None Include="UI\MinimapButton.lua">
+      <Filter>UI</Filter>
+    </None>
+    <None Include="UI\SettingsPanel.lua">
+      <Filter>UI</Filter>
     </None>
     <None Include="Tests\Harness.lua">
       <Filter>Tests</Filter>

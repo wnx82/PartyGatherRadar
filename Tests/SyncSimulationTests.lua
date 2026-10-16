@@ -23,7 +23,9 @@ return function(H, root)
 	local function VisiblePins(client)
 		local pins = {}
 		for _, frame in ipairs(client.frames) do
-			if frame.frameType == "Button" and frame.shown and frame.point then
+			-- icônes de marqueurs : boutons anonymes de la minicarte (le bouton de l'addon est nommé)
+			if frame.frameType == "Button" and frame.parent == client.env.Minimap and not frame.name
+				and frame.shown and frame.point then
 				pins[#pins + 1] = frame
 			end
 		end
@@ -59,10 +61,10 @@ return function(H, root)
 		H.eq(#peersA, 1)
 		H.eq(peersA[1].name, "Aedot-Realm")
 		H.eq(peersA[1].peer.compatible, true)
-		H.eq(peersA[1].peer.addonVersion, "0.1.1")
+		H.eq(peersA[1].peer.addonVersion, "0.3.1")
 		H.eq(#peersB, 1)
 		H.eq(peersB[1].name, "Aekiss-Realm")
-		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.1.1"), "annonce de découverte")
+		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.3.1"), "annonce de découverte")
 		H.eq(peersA[1].peer.messages, #b.sent, "un message compté une seule fois")
 		H.ok(#a.sent <= 2 and #b.sent <= 2, "au plus un HELLO et une réponse par client")
 		local before = #a.sent + #b.sent
@@ -529,7 +531,7 @@ return function(H, root)
 	H.test("version incompatible : un seul avertissement, pas d'annonce de découverte", function()
 		local _, a = Grouped()
 		a:FireEvent("CHAT_MSG_ADDON", "PGRadar", "2;N;a;L;H;D;1429;1;1;0;0;0;x", "PARTY", "Aedot-Realm")
-		a:FireEvent("CHAT_MSG_ADDON", "PGRadar", "2;H;0.3.0;1;5", "PARTY", "Aedot-Realm")
+		a:FireEvent("CHAT_MSG_ADDON", "PGRadar", "2;H;9.0.0;1;5", "PARTY", "Aedot-Realm")
 		a:FireEvent("CHAT_MSG_ADDON", "PGRadar", "2;N;a;L;H;D;1429;1;1;0;0;0;x", "PARTY", "Aedot-Realm")
 		local warnings = 0
 		for _, line in ipairs(a.chat) do
@@ -538,7 +540,7 @@ return function(H, root)
 			end
 		end
 		H.eq(warnings, 1)
-		H.eq(a:ChatContains("Aedot utilise PartyGatherRadar 0.3.0"), nil)
+		H.eq(a:ChatContains("Aedot utilise PartyGatherRadar 9.0.0"), nil, "version future : pas d'annonce")
 		H.eq(a.ns.GroupSync.GetPeers()[1].peer.compatible, false)
 	end)
 
@@ -555,6 +557,7 @@ return function(H, root)
 
 	H.test("sonde : balayage abandonné si le personnage bouge", function()
 		local world, a = NewPair()
+		a.ns.Config.Set("autoDetect", false) -- sonde manuelle seule : pas de marqueurs LIVE automatiques
 		a.blips = { { name = "Pacifique", dx = 21, dy = 0 } }
 		a:Slash("probe scan")
 		a.x = a.x + 0.01 -- 35 m
@@ -571,6 +574,7 @@ return function(H, root)
 
 	H.test("les points simulés sont retrouvés et convertis en positions de carte", function()
 		local world, a = NewPair()
+		a.ns.Config.Set("autoDetect", false) -- sonde manuelle seule : pas de marqueurs LIVE automatiques
 		a.blips = {
 			{ name = "Pacifique", dx = 21, dy = 0 },
 			{ name = "Feuillargent", dx = -30, dy = 24 },
@@ -598,6 +602,7 @@ return function(H, root)
 
 	H.test("rotation de la minicarte : la conversion inverse reste cohérente", function()
 		local world, a = NewPair()
+		a.ns.Config.Set("autoDetect", false) -- sonde manuelle seule : pas de marqueurs LIVE automatiques
 		a.cvars.rotateMinimap = "1"
 		a.facing = math.pi / 2 -- face à l'ouest : un point en haut de la minicarte est à l'ouest
 		a.blips = { { name = "Pacifique", dx = 0, dy = 30 } }
@@ -736,5 +741,466 @@ return function(H, root)
 		H.eq(a.ns.GroupSync.GetPeers()[1].name, "Aedot-Realm")
 		NoErrors(a)
 		NoErrors(b)
+	end)
+
+	---------------------------------------------------------------------------
+	H.suite("Interface : bouton de minicarte et fenêtre de réglages")
+	---------------------------------------------------------------------------
+
+	local function Contains(texts, needle)
+		for _, text in ipairs(texts) do
+			if text and text:find(needle, 1, true) then
+				return true
+			end
+		end
+		return false
+	end
+
+	H.test("bouton créé au chargement, nommé, sur le bord de la minicarte", function()
+		local _, a = NewPair()
+		local button = a.ns.MinimapButton.GetFrame()
+		H.ok(button, "bouton créé")
+		H.eq(button.name, "PartyGatherRadarMinimapButton")
+		H.eq(button.parent, a.env.Minimap)
+		H.eq(button.shown, true)
+		-- 225° (défaut) sur une minicarte de 140 unités : rayon 75
+		H.near(button.point.x, -75 * math.sqrt(0.5), 0.01, "x")
+		H.near(button.point.y, -75 * math.sqrt(0.5), 0.01, "y")
+		H.eq(#a:UnexpectedGlobals(), 0)
+		NoErrors(a)
+	end)
+
+	H.test("position sur le bord : minicarte ronde ou carrée", function()
+		local _, a = NewPair()
+		local Offset = a.ns.MinimapButton.OffsetForAngle
+		local x, y = Offset(0, 140, "ROUND")
+		H.near(x, 75, 1e-9)
+		H.near(y, 0, 1e-9)
+		x, y = Offset(90, 140, "ROUND")
+		H.near(x, 0, 1e-9)
+		H.near(y, 75, 1e-9)
+		x, y = Offset(45, 140, "SQUARE")
+		H.near(x, 75, 1e-9, "coin du carré")
+		H.near(y, 75, 1e-9, "coin du carré")
+	end)
+
+	H.test("glisser le bouton : angle sauvegardé, le relâchement n'ouvre pas la fenêtre", function()
+		local world, a = NewPair()
+		local button = a.ns.MinimapButton.GetFrame()
+		local centerX, centerY = a.env.Minimap:GetCenter()
+		button.scripts.OnDragStart(button)
+		a.cursorX, a.cursorY = centerX, centerY + 100 -- au nord du centre
+		button.scripts.OnUpdate(button, 0.02)
+		button.scripts.OnDragStop(button)
+		H.near(a.ns.Config.Get("minimapButtonAngle"), 90, 1e-6, "angle sauvegardé")
+		H.near(button.point.x, 0, 1e-6)
+		H.near(button.point.y, 75, 1e-6)
+		button:Click()
+		H.eq(a.ns.SettingsPanel.IsOpen(), false, "clic de fin de déplacement ignoré")
+		world:Advance(0.5)
+		button:Click()
+		H.eq(a.ns.SettingsPanel.IsOpen(), true, "clic suivant : fenêtre ouverte")
+		button:Click()
+		H.eq(a.ns.SettingsPanel.IsOpen(), false, "second clic : fenêtre fermée")
+		NoErrors(a)
+	end)
+
+	H.test("/pgr button off|on : bouton masqué puis affiché, réglage conservé", function()
+		local _, a = NewPair()
+		local button = a.ns.MinimapButton.GetFrame()
+		a:Slash("button off")
+		H.eq(button.shown, false)
+		H.eq(a.ns.Config.Get("showMinimapButton"), false)
+		a:Reload()
+		H.eq(a.ns.MinimapButton.GetFrame().shown, false, "masqué après /reload")
+		a:Slash("button on")
+		H.eq(a.ns.MinimapButton.GetFrame().shown, true)
+		NoErrors(a)
+	end)
+
+	H.test("infobulle du bouton : version et membres utilisant l'addon", function()
+		local _, a = Grouped()
+		local button = a.ns.MinimapButton.GetFrame()
+		button.scripts.OnEnter(button)
+		H.eq(a.tooltipLines[1], "PartyGatherRadar 0.3.1")
+		H.eq(a.tooltipLines[2], "groupe : 1 autre(s) membre(s), 1 avec PartyGatherRadar")
+		NoErrors(a)
+	end)
+
+	H.test("/pgr ouvre la fenêtre : version, membres avec et sans l'addon", function()
+		local world = H.NewWorld(root)
+		world.regionalNames = true
+		local a = world:NewClient({ name = "Aekiss", surname = "Desbisous", realm = REALM })
+		local b = world:NewClient({ name = "Aedot", surname = "Wnx", realm = REALM })
+		local c = world:NewClient({ name = "Carl", surname = "Zed", realm = REALM, hasAddon = false })
+		a:Login(false)
+		b:Login(false)
+		c:Login(false)
+		world:SetGroup({ a, b, c })
+		world:Advance(3)
+		a:Slash("")
+		H.eq(a.ns.SettingsPanel.IsOpen(), true, "fenêtre ouverte")
+		local version, summary = a.ns.SettingsPanel.GetHeaderTexts()
+		H.eq(version, "version 0.3.1, protocole 1 — client 1.60.1 (build 70374)")
+		H.eq(summary, "2 autre(s) membre(s), 1 avec PartyGatherRadar")
+		local texts = a.ns.SettingsPanel.GetMemberTexts()
+		H.ok(Contains(texts, "Aedot Wnx — |cff40ff40PartyGatherRadar 0.3.1|r"), "membre avec l'addon")
+		H.ok(Contains(texts, "Carl Zed — |cff9d9d9dsans addon détecté|r"), "membre sans l'addon")
+		world:SetGroup({ a })
+		world:Advance(1)
+		texts = a.ns.SettingsPanel.GetMemberTexts()
+		H.ok(Contains(texts, "pas de groupe"), "fenêtre mise à jour au départ du groupe")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("case « informations des autres joueurs » : marqueurs reçus masqués puis réaffichés", function()
+		local world, a, b = Grouped()
+		b:Slash("test")
+		world:Advance(0.5)
+		H.eq(#VisiblePins(a), 1, "marqueur TEST d'Aedot affiché chez Aekiss")
+		a:Slash("config")
+		local check = a.ns.SettingsPanel.GetCheckbox("receiveEnabled")
+		H.eq(check:GetChecked(), true)
+		check:Click()
+		world:Advance(0.5)
+		H.eq(a.ns.Config.Get("receiveEnabled"), false)
+		H.eq(#VisiblePins(a), 0, "marqueurs des autres masqués")
+		check:Click()
+		world:Advance(0.5)
+		H.eq(a.ns.Config.Get("receiveEnabled"), true)
+		H.eq(#VisiblePins(a), 1, "marqueurs des autres réaffichés")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("toutes les cases reflètent et modifient leur réglage", function()
+		local world, a = Grouped()
+		a:Slash("")
+		for _, key in ipairs({ "enabled", "receiveEnabled", "shareEnabled", "showMinimap", "showHerbs", "showOres",
+			"showMinimapButton", "debug" }) do
+			local check = a.ns.SettingsPanel.GetCheckbox(key)
+			H.ok(check, "case " .. key)
+			local before = a.ns.Config.Get(key)
+			H.eq(check:GetChecked(), before, "état initial " .. key)
+			check:Click()
+			H.eq(a.ns.Config.Get(key), not before, "réglage modifié " .. key)
+			check:Click()
+			H.eq(a.ns.Config.Get(key), before, "réglage rétabli " .. key)
+		end
+		world:Advance(1)
+		NoErrors(a)
+	end)
+
+	H.test("client anglais : fenêtre et infobulle en anglais", function()
+		local world = H.NewWorld(root)
+		local a = world:NewClient({ name = "Aekiss", locale = "enUS" })
+		a:Login(false)
+		a:Slash("")
+		local _, summary = a.ns.SettingsPanel.GetHeaderTexts()
+		H.eq(summary, "")
+		H.ok(Contains(a.ns.SettingsPanel.GetMemberTexts(), "not in a group"))
+		local button = a.ns.MinimapButton.GetFrame()
+		button.scripts.OnEnter(button)
+		H.eq(a.tooltipLines[2], "not in a group")
+		NoErrors(a)
+	end)
+
+	---------------------------------------------------------------------------
+	H.suite("Détection automatique et partage (phases 2 et 3)")
+	---------------------------------------------------------------------------
+	-- Aekiss : pistage des herbes actif ; Aedot : aucun pistage. Ressources ancrées dans le monde
+	-- (worldBlips), zone de survol de 12 unités comme en jeu.
+
+	local ELWYNN = 1429
+	local MAP = H.MAPS[ELWYNN]
+
+	--- Position de carte à `east`, `north` mètres de (0,5 ; 0,5).
+	local function At(east, north)
+		return 0.5 + east / MAP.width, 0.5 - north / MAP.height
+	end
+
+	local function Herb(name, east, north)
+		local x, y = At(east, north)
+		return { name = name, mapID = ELWYNN, x = x, y = y }
+	end
+
+	local function Received(client, name)
+		local list = {}
+		client.ns.MarkerManager.ForEach(function(marker, status)
+			if marker.name == name and not marker.isLocal then
+				list[#list + 1] = { marker = marker, status = status }
+			end
+		end, client.world.time, "real")
+		return list
+	end
+
+	local function CountSent(client, messageType)
+		local count = 0
+		for _, message in ipairs(client.sent) do
+			if message.text:match("^%d+;" .. messageType .. ";") then
+				count = count + 1
+			end
+		end
+		return count
+	end
+
+	local function LogContains(client, text)
+		return table.concat(client.ns.Diagnostics.GetRecentLog(), "\n"):find(text, 1, true) ~= nil
+	end
+
+	H.test("tri des noms : herbes, minerais, et le bruit vu en jeu ignoré", function()
+		local _, a = NewPair()
+		local Classify = a.ns.ResourceNames.Classify
+		for _, name in ipairs({ "Pacifique", "Eglantine", "Églantine", "PACIFIQUE", "Feuillargent", "Peacebloom",
+			"Sauge-argent des montagnes", "Khadgar's Whisker" }) do
+			H.eq(Classify(name), "HERB", name)
+		end
+		for _, name in ipairs({ "Filon de cuivre", "Gisement de fer", "Riche filon de thorium", "Copper Vein",
+			"Rich Thorium Vein", "Filon de quelque chose de nouveau", "Some New Deposit" }) do
+			H.eq(Classify(name), "ORE", name)
+		end
+		for _, name in ipairs({ "Les échantillons de racines", "- Echantillon de racines : 0/8", "Aedot Wnx",
+			"Aekiss Desbisous", "", "   " }) do
+			H.eq(Classify(name), nil, name)
+		end
+		H.eq(Classify(H.SECRET), nil, "valeur secrète")
+		H.eq(Classify(nil), nil)
+	end)
+
+	H.test("infobulle chez Aedot : le nom de la plante en titre, à la place de PartyGatherRadar", function()
+		local world, a, b = Grouped()
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(5)
+		local pin = VisiblePins(b)[1]
+		pin.scripts.OnEnter(pin)
+		H.eq(b.tooltipLines[1], "Pacifique", "titre")
+		for _, line in ipairs(b.tooltipLines) do
+			H.ok(line ~= "PartyGatherRadar", "plus de titre PartyGatherRadar")
+			H.ok(not line:find("Nom :", 1, true), "nom pas répété sur une ligne « Nom »")
+		end
+		H.ok(Contains(b.tooltipLines, "Détecté par : Aekiss"), "auteur de la détection")
+		H.ok(Contains(b.tooltipLines, "Type : Herboristerie"), "type")
+		-- nom masqué par le réglage : retour au titre de l'addon
+		b.ns.Config.Set("showTooltipName", false)
+		pin.scripts.OnEnter(pin)
+		H.eq(b.tooltipLines[1], "PartyGatherRadar")
+		NoErrors(b)
+	end)
+
+	H.test("une herbe de la minicarte d'Aekiss apparaît chez Aedot au bon endroit", function()
+		local world, a, b = Grouped()
+		local herb = Herb("Pacifique", 40, 30)
+		a.worldBlips = { herb }
+		world:Advance(5)
+		local list = Received(b, "Pacifique")
+		H.eq(#list, 1, "un seul marqueur reçu")
+		local marker = list[1].marker
+		H.eq(marker.kind, "HERB")
+		H.eq(marker.source, "LIVE")
+		H.eq(list[1].status, "ACTIVE")
+		local distance = b.ns.MarkerManager.DistanceYards(ELWYNN, marker.x, marker.y, herb.x, herb.y)
+		H.ok(distance <= 15, string.format("position à %.1f m de la plante", distance))
+		H.eq(#VisiblePins(b), 1, "icône sur la minicarte d'Aedot")
+		H.eq(#VisiblePins(a), 0, "aucun doublon sur la minicarte d'Aekiss (point natif déjà visible)")
+		H.eq(CountSent(a, "N"), 1, "une seule annonce")
+		H.ok(LogContains(a, "herbe : Pacifique"), "découverte journalisée")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("deux plantes du même nom à 100 m : deux marqueurs ; une plante touchée sur plusieurs points : un seul", function()
+		local world, a, b = Grouped()
+		a.worldBlips = { Herb("Pacifique", -50, 0), Herb("Pacifique", 50, 0), Herb("Feuillargent", 0, 60) }
+		world:Advance(5)
+		H.eq(#Received(b, "Pacifique"), 2)
+		H.eq(#Received(b, "Feuillargent"), 1)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 3)
+		H.eq(CountSent(a, "N"), 3, "une annonce par plante")
+	end)
+
+	H.test("zones de quête et joueurs ignorés : aucun marqueur, journal sans flot", function()
+		local world, a, b = Grouped()
+		a.questArea = "Les échantillons de racines"
+		a.blips = { { name = "Aedot", dx = 3, dy = 2 } }
+		a.worldBlips = { Herb("Pacifique", -60, 10) }
+		world:Advance(10)
+		H.eq(#Received(b, "Pacifique"), 1, "la plante passe malgré le bruit")
+		H.eq(b.ns.MarkerManager.Count(), 1, "rien d'autre n'est partagé")
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1)
+		local ignored = 0
+		for _, line in ipairs(a.ns.Diagnostics.GetRecentLog()) do
+			if line:find("nom ignoré", 1, true) then
+				ignored = ignored + 1
+			end
+		end
+		H.eq(ignored, 3, "titre de quête, objectif et joueur journalisés une seule fois chacun")
+		NoErrors(a)
+	end)
+
+	H.test("aucun sondage sans pistage actif, en combat, souris sur la minicarte ou option désactivée", function()
+		local world, a = Grouped()
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		local function NoProbe(label)
+			local before = a.mouseoverCalls
+			world:Advance(5)
+			H.eq(a.mouseoverCalls, before, label)
+		end
+		a.tracking = { { name = "Découverte d'herbes", active = false, spellID = 2383, type = "spell" } }
+		NoProbe("pistage inactif")
+		a.tracking = { H.HERB_TRACKING }
+		a.inCombat = true
+		NoProbe("combat")
+		a.inCombat = false
+		a.mouseOverMinimap = true
+		NoProbe("souris sur la minicarte")
+		a.mouseOverMinimap = false
+		a:Slash("auto off")
+		NoProbe("option désactivée")
+		a:Slash("auto on")
+		world:Advance(5)
+		H.ok(a.mouseoverCalls > 0, "reprise")
+		H.eq(a.softCursor, false, "curseur logiciel toujours rendu")
+		NoErrors(a)
+	end)
+
+	H.test("plante récoltée ou disparue : retirée chez Aedot", function()
+		local world, a, b = Grouped()
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(5)
+		H.eq(#Received(b, "Pacifique"), 1)
+		a.worldBlips = {}
+		world:Advance(6)
+		H.eq(#Received(b, "Pacifique"), 0, "marqueur retiré")
+		H.eq(CountSent(a, "X"), 1, "un REMOVE envoyé")
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 0)
+		H.ok(LogContains(a, "disparu : Pacifique"), "disparition journalisée")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("plante au bord de la minicarte : son absence n'est pas une disparition", function()
+		local world, a, b = Grouped()
+		a.worldBlips = { Herb("Pacifique", 200, 0) }
+		world:Advance(5)
+		H.eq(#Received(b, "Pacifique"), 1, "détectée à 200 m")
+		a.worldBlips = {}
+		world:Advance(6)
+		H.eq(#Received(b, "Pacifique"), 1, "toujours là : absence hors de la zone fiable")
+		H.eq(CountSent(a, "X"), 0)
+	end)
+
+	H.test("en déplacement : une seule ressource, position juste", function()
+		local world, a, b = Grouped()
+		local herb = Herb("Pacifique", 80, 20)
+		a.worldBlips = { herb }
+		for _ = 1, 200 do -- 10 s à 7 m/s vers l'est : la plante passe à côté puis derrière
+			a.x = a.x + 7 * 0.05 / MAP.width
+			world:Advance(0.05)
+		end
+		local list = Received(b, "Pacifique")
+		H.eq(#list, 1, "pas de doublon")
+		local distance = b.ns.MarkerManager.DistanceYards(ELWYNN, list[1].marker.x, list[1].marker.y, herb.x, herb.y)
+		H.ok(distance <= 12, string.format("position moyenne à %.1f m de la plante", distance))
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1)
+		NoErrors(a)
+	end)
+
+	H.test("rafraîchissement : le marqueur reste récent chez Aedot, sans flot de messages", function()
+		local world, a, b = Grouped()
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(90)
+		local list = Received(b, "Pacifique")
+		H.eq(#list, 1)
+		H.eq(list[1].status, "ACTIVE", "toujours récent après 90 s")
+		local nodes = CountSent(a, "N")
+		H.ok(nodes >= 3 and nodes <= 5, "annonces espacées de 25 s : " .. nodes)
+	end)
+
+	H.test("réception réactivée chez Aedot : le marqueur revient au rafraîchissement suivant", function()
+		local world, a, b = Grouped()
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(5)
+		b:Slash("receive off")
+		world:Advance(70)
+		H.eq(#VisiblePins(b), 0, "masqué pendant la désactivation")
+		b:Slash("receive on")
+		world:Advance(30)
+		local list = Received(b, "Pacifique")
+		H.eq(list[1] and list[1].status, "ACTIVE", "de nouveau récent")
+		H.eq(#VisiblePins(b), 1)
+	end)
+
+	H.test("nouveau membre : les ressources visibles lui sont envoyées", function()
+		local world, a, b = NewPair()
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(5)
+		H.eq(CountSent(a, "N"), 0, "seul : rien n'est envoyé")
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1, "mais la plante est suivie")
+		world:SetGroup({ a, b })
+		world:Advance(6)
+		H.eq(#Received(b, "Pacifique"), 1, "reçue après la formation du groupe")
+	end)
+
+	H.test("partage désactivé : rien n'est envoyé, détection locale conservée", function()
+		local world, a, b = Grouped()
+		a:Slash("share off")
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(5)
+		H.eq(CountSent(a, "N"), 0)
+		H.eq(#Received(b, "Pacifique"), 0)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1)
+	end)
+
+	H.test("nom appris à la récolte : reconnu ensuite et conservé", function()
+		local world, a, b = Grouped()
+		a.worldBlips = { Herb("Herbe de Forever", 40, 30) }
+		world:Advance(5)
+		H.eq(#Received(b, "Herbe de Forever"), 0, "nom inconnu : ignoré")
+		a:FireEvent("UNIT_SPELLCAST_SENT", "player", "Herbe de Forever", "Cast-1", 2366)
+		H.ok(LogContains(a, "nom appris à la récolte : Herbe de Forever"), "apprentissage journalisé")
+		world:Advance(5)
+		H.eq(#Received(b, "Herbe de Forever"), 1, "reconnu au balayage suivant")
+		H.eq(a.env.PartyGatherRadarDB.learnedNames.HERB["herbe de forever"], "Herbe de Forever", "sauvegardé")
+		a:FireEvent("UNIT_SPELLCAST_SENT", "player", H.SECRET, "Cast-2", 2366)
+		a:FireEvent("UNIT_SPELLCAST_SENT", "party1", "Autre plante", "Cast-3", 2366)
+		a:FireEvent("UNIT_SPELLCAST_SENT", "player", "Ennemi", "Cast-4", 133)
+		H.eq(a.ns.ResourceNames.Classify("Autre plante"), nil, "autre joueur : rien appris")
+		H.eq(a.ns.ResourceNames.Classify("Ennemi"), nil, "autre sort : rien appris")
+		NoErrors(a)
+	end)
+
+	H.test("option « mes propres détections » : la plante s'affiche aussi chez Aekiss", function()
+		local world, a = Grouped()
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		a.ns.Config.Set("showOwnDetections", true)
+		world:Advance(5)
+		H.eq(#VisiblePins(a), 1)
+	end)
+
+	H.test("balayage manuel pendant la détection automatique : aucun conflit", function()
+		local world, a = Grouped()
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(2.02) -- un balayage automatique vient de démarrer
+		a:Slash("probe scan")
+		world:Advance(1)
+		H.ok(a:ChatContains("balayage terminé"), "sonde manuelle terminée")
+		world:Advance(5)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1, "détection automatique reprise")
+		H.eq(a.softCursor, false)
+		NoErrors(a)
+	end)
+
+	H.test("/pgr status et /pgr diag décrivent la détection automatique", function()
+		local world, a = Grouped()
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(5)
+		a:Slash("status")
+		H.ok(a:ChatContains("détection automatique : oui"), "ligne de statut")
+		a:Slash("diag")
+		local report = table.concat(a.ns.db.diagnostics.lastReport, "\n")
+		H.ok(report:find("detection.auto : INFO — active", 1, true), "sonde detection.auto")
+		H.ok(report:find("1 ressource(s) suivie(s)", 1, true), "ressources suivies")
+		NoErrors(a)
 	end)
 end

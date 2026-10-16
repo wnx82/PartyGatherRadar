@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="PartyGatherRadar.vcxproj" />
+  <Project Path="PartyGatherRadar.vcxproj" Id="d398df72-4cea-4397-a81c-5e8bc39f119a" />
 </Solution>

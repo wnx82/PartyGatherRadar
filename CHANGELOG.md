@@ -4,6 +4,69 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 [SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` (`## Version`) et
 `Core/Init.lua` (`ns.VERSION`).
 
+## [0.3.1] - 2026-10-15
+
+### Modifié
+
+- Infobulle des icônes sur la minicarte : le nom de la ressource (« Pacifique ») sert de titre, dans la
+  couleur de son statut, à la place de « PartyGatherRadar » ; la ligne « Nom » n'est plus répétée. Si le
+  nom est absent ou masqué (`showTooltipName`), le titre de l'addon revient.
+
+## [0.3.0] - 2026-10-15
+
+Phases 2 et 3 (cœur) : l'addon fonctionne seul, sans commande. Testé hors jeu, pas encore vérifié en jeu.
+
+### Ajouté
+
+- Détection automatique (`Detection/AutoDetect.lua`) : quand le pistage des herbes ou des minerais est
+  actif, la minicarte est sondée toutes les 2 s (API de sondage propre à Forever, vérifiée en jeu le
+  2026-10-15), par lots de 40 points par image ; chaque lot utilise la position du joueur du moment, ce qui
+  garde le balayage juste en déplacement. Jamais en combat, jamais quand la souris survole la minicarte,
+  jamais sans pistage actif.
+- Suivi des ressources : une plante revue garde son identifiant et sa position s'affine (moyenne) ; elle
+  est envoyée au groupe à sa découverte, rafraîchie toutes les 25 s tant qu'elle reste visible, renvoyée à
+  un nouveau membre, puis retirée chez tous (REMOVE) quand elle manque à 2 balayages alors qu'elle devrait
+  être visible (récoltée ou disparue).
+- Tri des noms (`Detection/ResourceNames.lua`) : herbes et minerais en français et en anglais, comparés
+  sans accents ni majuscules, forme des noms de gisements (« Filon de ... », « ... Vein »). Les zones de
+  quête et les joueurs, vus en jeu dans l'infobulle de la minicarte, sont ignorés.
+- Noms appris à la récolte : le nom ciblé par Cueillette ou Minage devient une ressource connue
+  (`PartyGatherRadarDB.learnedNames`, 200 noms au plus par type).
+- Réglages `autoDetect` (cases de la fenêtre, `/pgr auto on|off`) et `showOwnDetections` (ses propres
+  détections sont masquées par défaut sur sa minicarte : le point natif y est déjà).
+- Diagnostics : sonde `detection.auto`, ligne de `/pgr status`, capacité « détection locale » ;
+  journal : découverte, disparition, noms ignorés (une fois chacun), noms appris, réception du PONG.
+- Tests hors jeu (122) : ressources simulées dans le monde, zones de quête, combat, survol de la
+  minicarte, déplacement, disparition, rafraîchissement, apprentissage des noms.
+
+### Modifié
+
+- `/pgr probe scan` : une seule ligne de résumé dans le journal pour les repères qui ne sont pas des
+  ressources (un balayage remplissait le journal sauvegardé) ; interrompt la détection automatique.
+- Détection automatique : points touchés regroupés par voisinage sur la grille, une ressource donne un
+  seul repère. Le regroupement autour d'un centre mobile, gardé par `/pgr probe scan`, a découpé le
+  joueur en 3 repères en jeu le 2026-10-15.
+
+## [0.2.0] - 2026-10-15
+
+### Ajouté
+
+- Bouton autour de la minicarte (icône de fleur) : clic pour ouvrir la fenêtre de réglages, glisser pour
+  le déplacer sur le bord (minicarte ronde ou carrée), infobulle avec la version et le nombre de membres
+  du groupe qui utilisent l'addon. Masquable (`/pgr button off`), position conservée.
+- Fenêtre de réglages (`/pgr`, `/pgr config`, Échap pour fermer) : version de l'addon, du protocole et du
+  client ; membres du groupe avec leur version de PartyGatherRadar ou « sans addon détecté » ; cases
+  « Activer », « Afficher les infos des autres joueurs », « Partager mes infos », « Afficher les
+  marqueurs sur la minicarte », « Herbes », « Minerais », « Bouton autour de la minicarte »,
+  « Journal de diagnostic » ; boutons « Test de communication » et « Diagnostic ».
+- Réglages `showMinimapButton` et `minimapButtonAngle` (schéma inchangé, valeurs par défaut ajoutées).
+- Tests hors jeu (106) : bouton, position, déplacement, masquage, infobulle, fenêtre, cases, anglais.
+
+### Modifié
+
+- `/pgr` sans argument ouvre la fenêtre de réglages ; la liste des commandes reste dans `/pgr help`.
+- `/pgr peers` liste les membres sans addon à partir de la composition du groupe déjà connue.
+
 ## [0.1.1] - 2026-10-15
 
 Correctif issu du premier essai en jeu à deux clients (journal d'Aedot du 2026-10-15).
