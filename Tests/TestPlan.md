@@ -1,4 +1,4 @@
-# Plan de tests — PartyGatherRadar 0.3.1
+# Plan de tests — PartyGatherRadar 0.3.2
 
 Deux niveaux de tests :
 
@@ -49,6 +49,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 106 réussis, 0 échec (0.2.0) |
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 122 réussis, 0 échec (0.3.0) |
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 123 réussis, 0 échec (0.3.1) |
+| 2026-11-04 | Lua 5.1 embarqué (lupa) | 124 réussis, 0 échec (0.3.2) |
 
 ## 2. Tests en jeu
 
@@ -152,9 +153,9 @@ vérifient l'alignement avec le marqueur TEST de `/pgr test`.
 | Étape | Résultat attendu | Statut |
 |---|---|---|
 | Connexion | Bouton (icône de fleur) sur le bord de la minicarte, en bas à gauche | Non exécuté |
-| Survol du bouton | Infobulle : « PartyGatherRadar 0.3.1 », membres du groupe et nombre avec l'addon | Non exécuté |
+| Survol du bouton | Infobulle : « PartyGatherRadar 0.3.2 », membres du groupe et nombre avec l'addon | Non exécuté |
 | Glisser le bouton, `/reload` | Le bouton suit le bord de la minicarte et garde sa place après `/reload` | Non exécuté |
-| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.3.1 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
+| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.3.2 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
 | Aedot `/pgr test`, Aekiss décoche « Afficher les infos des autres joueurs » | Le marqueur TEST d'Aedot disparaît de la minicarte d'Aekiss, puis revient quand la case est recochée | Non exécuté |
 | Décocher « Bouton autour de la minicarte » | Bouton masqué ; `/pgr` rouvre la fenêtre ; `/pgr button on` le réaffiche | Non exécuté |
 

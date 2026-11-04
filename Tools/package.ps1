@@ -5,6 +5,7 @@
 .DESCRIPTION
     - lit la version dans PartyGatherRadar.toc (## Version) ;
     - vérifie que chaque fichier listé dans le TOC existe ;
+    - vérifie que les TOC par saveur (PartyGatherRadar_Forever.toc…) sont identiques au TOC principal ;
     - copie uniquement les fichiers utiles au jeu et la documentation (pas Tests, Tools, fichiers Visual Studio) ;
     - crée une archive dont la racine est le dossier PartyGatherRadar\ (chemins avec "/").
     Avec -Install, copie aussi le dossier dans le répertoire AddOns indiqué (remplace l'ancienne version).
@@ -37,9 +38,19 @@ foreach ($file in $tocFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $file))) { throw "Fichier du TOC absent : $file" }
 }
 
+# TOC par saveur (le client Forever charge PartyGatherRadar_Forever.toc s'il existe) : copie exacte du TOC principal
+$mainTocText = [System.IO.File]::ReadAllText($tocPath) -replace "`r`n", "`n"
+$tocVariants = @(Get-ChildItem -LiteralPath $root -Filter "${addonName}_*.toc" -File | Sort-Object Name)
+foreach ($variant in $tocVariants) {
+    if (([System.IO.File]::ReadAllText($variant.FullName) -replace "`r`n", "`n") -ne $mainTocText) {
+        throw "$($variant.Name) diffère de $addonName.toc : les deux fichiers doivent rester identiques."
+    }
+}
+
 # Contenu du paquet
 $folders = @('Core', 'Detection', 'Communication', 'Map', 'UI', 'Localization', 'Media')
-$documents = @("$addonName.toc", 'README.md', 'CHANGELOG.md', 'TECHNICAL-LIMITATIONS.md', 'LICENSE')
+$documents = @("$addonName.toc") + @($tocVariants | ForEach-Object { $_.Name }) +
+    @('README.md', 'CHANGELOG.md', 'TECHNICAL-LIMITATIONS.md', 'LICENSE')
 
 $dist = Join-Path $root 'dist'
 $staging = Join-Path $dist 'staging'

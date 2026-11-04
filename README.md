@@ -3,7 +3,7 @@
 Addon pour **World of Warcraft: Forever** (bêta 1.60.1, interface 16001) : partager en temps réel,
 entre membres d'un groupe, les ressources de récolte (herbes, minerais) détectées sur la minicarte.
 
-> **État : prototype 0.3.1.** Détection automatique des herbes et minerais de la minicarte et partage
+> **État : prototype 0.3.2.** Détection automatique des herbes et minerais de la minicarte et partage
 > au groupe (phases 2 et 3, expérimental), bouton de minicarte et fenêtre de réglages. Le tout est testé
 > hors jeu (simulation de plusieurs clients). **Vérifié en jeu** (2026-10-15, deux clients) : chargement, sondes
 > d'API, identité, communication de groupe, lecture des plantes par le balayage. **Pas encore vérifié** :
@@ -32,7 +32,7 @@ externe, aucune automatisation de déplacement, d'interaction ou de récolte, au
 artificiellement chez un joueur qui ne le possède pas. Aucune position n'est inventée : sans donnée
 fiable, rien n'est affiché.
 
-## Fonctionnalités de la version 0.3.1
+## Fonctionnalités de la version 0.3.2
 
 Réellement implémenté :
 
@@ -68,7 +68,7 @@ réglages avancés (taille, couleurs, durées) dans la fenêtre (phase 4).
 
 Chemin cible : `World of Warcraft\_classic_beta_\Interface\AddOns\PartyGatherRadar\`
 
-**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.3.1.zip` dans le dossier `AddOns` ; le ZIP
+**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.3.2.zip` dans le dossier `AddOns` ; le ZIP
 contient déjà le dossier `PartyGatherRadar\`. Vérifier que le chemin final est
 `AddOns\PartyGatherRadar\PartyGatherRadar.toc` (et non `AddOns\PartyGatherRadar\PartyGatherRadar\…`).
 
@@ -104,7 +104,7 @@ n'est nécessaire.
 ## Premier essai à deux
 
 1. Installer l'addon chez les deux joueurs, se grouper.
-2. Chacun voit « <autre> utilise PartyGatherRadar 0.3.1 ». Sinon : `/pgr status` et `/pgr diag`.
+2. Chacun voit « <autre> utilise PartyGatherRadar 0.3.2 ». Sinon : `/pgr status` et `/pgr diag`.
 3. Aekiss active Découverte d'herbes et s'approche de plantes : en quelques secondes, Aedot voit une
    icône verte à l'emplacement de chaque plante sur sa propre minicarte (survol : le nom de la plante
    en titre, « Détecté par : Aekiss »). Rien à taper : la détection est automatique.
@@ -124,6 +124,7 @@ Cases principales dans la fenêtre de réglages (`/pgr`) ; taille, couleurs et d
 ```
 PartyGatherRadar/
 ├── PartyGatherRadar.toc        ordre de chargement, interface 16001
+├── PartyGatherRadar_Forever.toc  copie exacte du TOC, chargée en priorité par le client Forever
 ├── Core/                       Init (espace de noms), Diagnostics, Events, Config, Commands
 ├── Localization/               frFR (référence), enUS
 ├── Detection/                  Coordinates (cartes, minicarte), Tracking (pistage, sondes)

@@ -13,11 +13,21 @@ return function(H, root)
 	H.suite("Projet : TOC, chargement, variables globales")
 	---------------------------------------------------------------------------
 
-	H.test("le TOC cible l'interface 16001 et la version 0.3.1", function()
+	H.test("le TOC cible l'interface 16001 et la version 0.3.2", function()
 		H.eq(world.metadata.Interface, "16001", "## Interface")
-		H.eq(world.metadata.Version, "0.3.1", "## Version")
+		H.eq(world.metadata.Version, "0.3.2", "## Version")
 		H.eq(world.metadata.Version, ns.VERSION, "version du TOC et de Init.lua")
 		H.eq(world.metadata.SavedVariables, "PartyGatherRadarDB", "## SavedVariables")
+	end)
+
+	H.test("PartyGatherRadar_Forever.toc reste identique au TOC principal", function()
+		local function ReadText(name)
+			local handle = assert(io.open(root .. "/" .. name, "r"), name .. " introuvable")
+			local text = (handle:read("*a"):gsub("\r\n", "\n"))
+			handle:close()
+			return text
+		end
+		H.eq(ReadText("PartyGatherRadar_Forever.toc"), ReadText("PartyGatherRadar.toc"), "contenu des deux TOC")
 	end)
 
 	H.test("chaque fichier du TOC existe et compile en Lua 5.1", function()

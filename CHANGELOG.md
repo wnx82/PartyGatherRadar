@@ -1,8 +1,22 @@
 # Journal des modifications
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; versions selon
-[SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` (`## Version`) et
-`Core/Init.lua` (`ns.VERSION`).
+[SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` et
+`PartyGatherRadar_Forever.toc` (`## Version`, fichiers identiques) et `Core/Init.lua` (`ns.VERSION`).
+
+## [0.3.2] - 2026-11-04
+
+### Ajouté
+
+- `PartyGatherRadar_Forever.toc` : copie exacte de `PartyGatherRadar.toc`, chargée en priorité par le
+  client WoW Forever (même convention que Questie ou Offhand). `Tools/package.ps1` l'inclut dans le ZIP et
+  refuse d'empaqueter si les deux TOC diffèrent ; un test hors jeu vérifie la même chose.
+
+### Corrigé
+
+- Publication CurseForge : l'app CurseForge signalait la 0.3.1 « might be corrupt (Belongs to 'Retail') »
+  dans l'instance Forever, car l'index de CurseForge rangeait ce fichier sous Retail 12.1.5 malgré son
+  tag WoW Forever 1.60.1. La 0.3.2 est publiée comme nouveau fichier avec le tag WoW Forever 1.60.1.
 
 ## [0.3.1] - 2026-10-15
 

@@ -145,6 +145,7 @@
 
   <ItemGroup>
     <None Include="PartyGatherRadar.toc" />
+    <None Include="PartyGatherRadar_Forever.toc" />
     <None Include="CHANGELOG.md" />
     <None Include="README.md" />
     <None Include="TECHNICAL-LIMITATIONS.md" />
