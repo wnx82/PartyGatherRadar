@@ -266,13 +266,15 @@ end
 local scanFrame
 local scan -- état du balayage en cours
 
-local function BuildGrid(halfWidth, halfHeight)
+--- Grille de points (unités du cadre Minimap, relatives au centre) couvrant le disque de la minicarte.
+local function BuildGrid(halfWidth, halfHeight, spacing)
+	spacing = spacing or SCAN_SPACING
 	local points = {}
 	local radius = math.min(halfWidth, halfHeight) - 4
-	local steps = floor(radius / SCAN_SPACING)
+	local steps = floor(radius / spacing)
 	for i = -steps, steps do
 		for j = -steps, steps do
-			local dx, dy = i * SCAN_SPACING, j * SCAN_SPACING
+			local dx, dy = i * spacing, j * spacing
 			if dx * dx + dy * dy <= radius * radius then
 				points[#points + 1] = { dx, dy }
 			end
@@ -284,6 +286,16 @@ end
 local function ProbePoint(dx, dy, scale, centerX, centerY)
 	Minimap:UpdateMouseoverAtPoint((centerX + dx) * scale, (centerY + dy) * scale)
 	return Tracking.ReadMinimapMouseover()
+end
+
+-- partagés avec la détection automatique (Detection/AutoDetect.lua)
+Tracking.ProbeApisAvailable = ProbeApisAvailable
+Tracking.BuildGrid = BuildGrid
+Tracking.ProbePoint = ProbePoint
+
+--- Vrai pendant un balayage manuel (/pgr probe scan).
+function Tracking.IsScanRunning()
+	return scan ~= nil
 end
 
 --- Regroupe les points touchés par nom ; renvoie une liste { name, dx, dy, hits, spread }.
@@ -336,14 +348,33 @@ local function FinishScan(aborted)
 	local clusters = Tracking.ClusterHits(current.hits)
 	ns.Diagnostics.SetFlag("minimapScanResult", format("%d point(s), %d repère(s)", #current.points, #clusters))
 	ns.Print(ns.T("PROBE_SCAN_DONE", #current.points, #clusters, (ns.Now() - current.startedAt) * 1000))
+	-- journal : une ligne par herbe ou minerai, un seul résumé pour le reste (zones de quête, joueurs...),
+	-- sinon un balayage remplit le journal sauvegardé (300 lignes)
+	local others, otherOrder = {}, {}
+	for _, cluster in ipairs(clusters) do
+		if not ns.ResourceNames.Classify(cluster.name) then
+			if not others[cluster.name] then
+				otherOrder[#otherOrder + 1] = cluster.name
+			end
+			others[cluster.name] = (others[cluster.name] or 0) + 1
+		end
+	end
+	local summary = {}
+	for _, name in ipairs(otherOrder) do
+		summary[#summary + 1] = format("%s x%d", name, others[name])
+	end
+	ns.Diagnostics.Log("SONDE", "balayage : %d point(s), %d repère(s) ; hors ressources : %s", #current.points,
+		#clusters, #summary > 0 and ns.Utf8Truncate(table.concat(summary, ", "), 400) or "aucun")
 	local scanTag = floor(current.startedAt)
 	local placed = 0
 	for index, cluster in ipairs(clusters) do
 		local mapID, x, y, yardsPerUnit = Tracking.MinimapOffsetToMap(cluster.dx, cluster.dy, current.context)
 		local accuracy = (cluster.spread + SCAN_SPACING) * yardsPerUnit
 		ns.Print(ns.T("PROBE_SCAN_HIT", cluster.name, x * 100, y * 100, accuracy, cluster.hits))
-		ns.Diagnostics.Log("SONDE", "repère '%s' carte %d (%.2f, %.2f) ±%.0f m, %d touche(s)", cluster.name, mapID,
-			x * 100, y * 100, accuracy, cluster.hits)
+		if not others[cluster.name] then
+			ns.Diagnostics.Log("SONDE", "repère '%s' carte %d (%.2f, %.2f) ±%.0f m, %d touche(s)", cluster.name, mapID,
+				x * 100, y * 100, accuracy, cluster.hits)
+		end
 		ns.Diagnostics.SetFlag("minimapTooltipSeen", cluster.name)
 		-- marqueur local de calibration : source TEST, jamais partagé. Superposé au point natif,
 		-- il valide visuellement la chaîne minicarte -> carte -> minicarte.
@@ -441,6 +472,10 @@ function Tracking.StartScanProbe()
 	end
 	if not ProbeApisAvailable() then
 		return false, ns.T("PROBE_REASON_API")
+	end
+	-- le balayage manuel prend la main sur la détection automatique (même curseur logiciel)
+	if ns.AutoDetect then
+		ns.AutoDetect.Abort("probe")
 	end
 	if InCombatLockdown and InCombatLockdown() then
 		return false, ns.T("PROBE_REASON_COMBAT")

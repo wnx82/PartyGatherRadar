@@ -246,6 +246,10 @@ function World:NewClient(opts)
 	client.sent = {}
 	client.sendResult = nil -- code forcé renvoyé par SendAddonMessage (tests de refus)
 	client.blips = {}       -- points de minicarte simulés : { name, dx, dy } (unités du cadre)
+	client.worldBlips = {}  -- ressources dans le monde : { name, mapID, x, y } (coordonnées de carte)
+	client.worldBlipRadius = 12 -- unités du cadre : zone de survol d'un point
+	client.mouseoverCalls = 0
+	client.inCombat = false
 	-- types de pistage connus du personnage (C_Minimap.GetTrackingInfo)
 	client.tracking = opts.tracking or {}
 	self.clients[#self.clients + 1] = client
@@ -313,20 +317,51 @@ local function NewRegion(kind)
 	local region = { kind = kind, shown = true }
 	local noop = function() end
 	for _, method in ipairs({ "SetAllPoints", "SetColorTexture", "SetTexture", "SetVertexColor", "SetDesaturated",
-		"AddMaskTexture", "SetDrawLayer" }) do
+		"AddMaskTexture", "SetDrawLayer", "SetTexCoord", "SetSize", "SetWidth", "SetHeight", "SetJustifyH",
+		"SetJustifyV", "SetTextColor", "SetWordWrap", "SetFontObject" }) do
 		region[method] = noop
 	end
 	function region:SetPoint(_, _, _, x, y) self.point = { x = x, y = y } end
 	function region:ClearAllPoints() self.point = nil end
+	function region:SetText(text) self.text = text end
+	function region:GetText() return self.text end
+	function region:Show() self.shown = true end
+	function region:Hide() self.shown = false end
+	function region:IsShown() return self.shown end
 	return region
 end
 
 local function MakeFrameFactory(client)
-	local function CreateFrame(frameType, name, parent)
+	local function CreateFrame(frameType, name, parent, template)
 		local frame = {
-			frameType = frameType, name = name, parent = parent, events = {}, scripts = {}, shown = true,
-			width = 0, height = 0, level = 1, alpha = 1,
+			frameType = frameType, name = name, parent = parent, template = template, events = {}, scripts = {},
+			shown = true, width = 0, height = 0, level = 1, alpha = 1, enabled = true,
 		}
+		-- interface (bouton de minicarte, fenêtre de réglages) : méthodes sans effet observable ici
+		local noop = function() end
+		for _, method in ipairs({ "SetFrameStrata", "RegisterForClicks", "RegisterForDrag", "SetHighlightTexture",
+			"LockHighlight", "UnlockHighlight", "SetMovable", "SetClampedToScreen", "StartMoving",
+			"StopMovingOrSizing", "SetBackdrop", "SetBackdropColor", "SetBackdropBorderColor" }) do
+			frame[method] = noop
+		end
+		function frame:CreateFontString() return NewRegion("FontString") end
+		function frame:SetText(text) self.text = text end
+		function frame:GetText() return self.text end
+		function frame:SetChecked(checked) self.checked = checked and true or false end
+		function frame:GetChecked() return self.checked == true end
+		function frame:SetWidth(w) self.width = w end
+		function frame:SetHeight(h) self.height = h end
+		function frame:GetCenter() return 0, 0 end
+		--- Clic simulé : une case à cocher change d'état avant OnClick, comme dans le client.
+		function frame:Click(button)
+			if self.frameType == "CheckButton" then
+				self.checked = not self.checked
+			end
+			local onClick = self.scripts.OnClick
+			if onClick then
+				onClick(self, button or "LeftButton", false)
+			end
+		end
 		function frame:RegisterEvent(event)
 			if not KNOWN_EVENTS[event] then
 				error("Attempt to register unknown event \"" .. tostring(event) .. "\"")
@@ -337,7 +372,13 @@ local function MakeFrameFactory(client)
 		function frame:SetScript(script, fn) self.scripts[script] = fn end
 		function frame:GetScript(script) return self.scripts[script] end
 		function frame:HookScript(script, fn) self.scripts[script] = fn end
-		function frame:Show() self.shown = true end
+		function frame:Show()
+			local wasShown = self.shown
+			self.shown = true
+			if not wasShown and self.scripts.OnShow then
+				self.scripts.OnShow(self)
+			end
+		end
 		function frame:Hide() self.shown = false end
 		function frame:IsShown() return self.shown end
 		function frame:IsVisible() return self.shown end
@@ -383,6 +424,8 @@ local function BuildEnvironment(client)
 
 	client.frames, client.timers = {}, {}
 	api.CreateFrame = MakeFrameFactory(client)
+	api.UIParent = api.CreateFrame("Frame", "UIParent")
+	api.UISpecialFrames = {}
 
 	api.GetTime = function() return world.time end
 	api.GetLocale = function() return client.locale end
@@ -393,15 +436,19 @@ local function BuildEnvironment(client)
 	api.LE_PARTY_CATEGORY_INSTANCE = 2
 	api.SlashCmdList = {}
 	api.DEFAULT_CHAT_FRAME = { AddMessage = function(_, text) client.chat[#client.chat + 1] = text end }
+	client.tooltipLines = {}
 	api.GameTooltip = {
-		SetOwner = function() end, AddLine = function() end, AddDoubleLine = function() end,
+		SetOwner = function() client.tooltipLines = {} end,
+		AddLine = function(_, text) client.tooltipLines[#client.tooltipLines + 1] = text end,
+		AddDoubleLine = function(_, left, right) client.tooltipLines[#client.tooltipLines + 1] = left .. " " .. right end,
 		Show = function() end, Hide = function() end, IsOwned = function() return false end,
 	}
+	client.cursorX, client.cursorY = 0, 0
 	api.issecretvalue = function(value) return value == H.SECRET end
-	api.InCombatLockdown = function() return false end
+	api.InCombatLockdown = function() return client.inCombat end
 	api.IsIndoors = function() return false end
 	api.GetPlayerFacing = function() return client.facing end
-	api.GetCursorPosition = function() return 0, 0 end
+	api.GetCursorPosition = function() return client.cursorX, client.cursorY end
 	api.C_CVar = { GetCVar = function(name) return client.cvars[name] end }
 	api.CreateVector2D = NewVector
 
@@ -570,7 +617,9 @@ local function BuildEnvironment(client)
 	api.Minimap.UpdateMouseoverAtPoint = function(_, x, y)
 		assert(client.softCursor, "UpdateMouseoverAtPoint appelé sans curseur logiciel")
 		client.mouseover = { x - 1070, y - 670 }
+		client.mouseoverCalls = client.mouseoverCalls + 1
 	end
+	api.Minimap.IsMouseOver = function() return client.mouseOverMinimap == true end
 	api.C_TooltipInfo = {
 		GetMinimapMouseover = function()
 			local point = client.mouseover
@@ -582,6 +631,23 @@ local function BuildEnvironment(client)
 				if (point[1] - blip.dx) ^ 2 + (point[2] - blip.dy) ^ 2 <= 7 ^ 2 then
 					lines[#lines + 1] = { leftText = blip.name }
 				end
+			end
+			-- points ancrés dans le monde : leur place sur la minicarte suit la position du joueur
+			-- (minicarte fixe, 233,333 m pour 70 unités) ; zone de survol large, comme en jeu (~6 points touchés)
+			local map = MAPS[client.mapID]
+			local unitsPerYard = 70 / 233.333
+			for _, blip in ipairs(client.worldBlips) do
+				if blip.mapID == client.mapID then
+					local dx = (blip.x - client.x) * map.width * unitsPerYard
+					local dy = (client.y - blip.y) * map.height * unitsPerYard
+					if (point[1] - dx) ^ 2 + (point[2] - dy) ^ 2 <= client.worldBlipRadius ^ 2 then
+						lines[#lines + 1] = { leftText = blip.name }
+					end
+				end
+			end
+			-- zone de quête : couvre toute la minicarte (constaté en jeu), deux lignes
+			if client.questArea then
+				lines[#lines + 1] = { leftText = client.questArea .. "\n- " .. client.questArea .. " : 0/8" }
 			end
 			return { lines = lines }
 		end,

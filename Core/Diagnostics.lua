@@ -423,6 +423,14 @@ function Diagnostics.RunProbes()
 		end
 		return Diagnostics.INFO, "non observée (utiliser /pgr probe minimap puis survoler un point)"
 	end)
+	ProbeLive(results, "detection.auto", function()
+		if not ns.AutoDetect then
+			return Diagnostics.ABSENT
+		end
+		local enabled = ns.Config.Get("autoDetect")
+		return enabled and Diagnostics.INFO or Diagnostics.WARN,
+			(enabled and "active" or "désactivée") .. " — " .. ns.AutoDetect.Describe()
+	end)
 	ProbeLive(results, "detection.vignettes", function()
 		if not (C_VignetteInfo and C_VignetteInfo.GetVignettes) then
 			return Diagnostics.ABSENT
@@ -446,7 +454,10 @@ function Diagnostics.GetCapabilities()
 
 	-- A. Détection locale des ressources de la minicarte
 	local probeApis = ns.Tracking and #ns.Tracking.FindBlipApis() == 3
-	if Diagnostics.flags.minimapTooltipSeen then
+	local autoFound = ns.AutoDetect and ns.AutoDetect.stats.found or 0
+	if autoFound > 0 then
+		caps.localDetection = { status = "PARTIEL", detail = ns.T("CAP_DETECTION_AUTO", autoFound) }
+	elseif Diagnostics.flags.minimapTooltipSeen then
 		caps.localDetection = { status = "PARTIEL", detail = ns.T("CAP_DETECTION_TOOLTIP") }
 	elseif probeApis then
 		caps.localDetection = { status = "NON CONFIRMÉ", detail = ns.T("CAP_DETECTION_PROBE_API") }
