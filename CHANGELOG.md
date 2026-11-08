@@ -4,6 +4,34 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 [SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` et
 `PartyGatherRadar_Forever.toc` (`## Version`, fichiers identiques) et `Core/Init.lua` (`ns.VERSION`).
 
+## [0.4.1] - 2026-11-08
+
+### Contexte
+
+Premier essai en jeu de la 0.4.0 sur le client live (build 1.60.1.70862, deux clients). Le balayage ne
+lit plus rien ; la détection au survol, le passage automatique en mode survol et la réception par le
+groupe fonctionnent. Mais une herbe survolée a produit 4 messages en 0,6 s : la souris qui parcourt le
+point déplace la position estimée de plus de 8 m à chaque lecture, et chaque déplacement était renvoyé.
+
+### Corrigé
+
+- Survol : une position affinée est renvoyée au groupe au plus toutes les 2 s. La dernière position part
+  aussi après le survol, une fois le délai écoulé. La première annonce reste immédiate ; le balayage
+  n'est pas concerné.
+- Mode survol : l'arrivée d'un membre ne déclenche plus un envoi à chaque lecture au survol (toutes les
+  0,2 s). La demande de renvoi n'était remise à zéro que par un balayage qui lit des ressources, donc
+  jamais en mode survol.
+
+### Ajouté
+
+- 3 tests hors jeu (142 au total) : souris qui bouge sur une herbe survolée, position en attente envoyée
+  après le survol, arrivée d'un membre en mode survol.
+
+### Modifié
+
+- Documentation : résultats du premier essai en jeu (scénario 11). Sur ce client, aucune détection n'est
+  possible sans survol : aucune API ne donne les points de la minicarte.
+
 ## [0.4.0] - 2026-11-08
 
 ### Contexte

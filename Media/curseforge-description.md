@@ -39,7 +39,7 @@
 ## Known limitations
 
 - Experimental: icon accuracy is about 10 to 30 m when the minimap is zoomed out.
-- On the restricted live client, only hovered nodes are shared; hover detection is not yet verified in game.
+- On the restricted live client, only hovered nodes are shared: no addon can see minimap nodes without the mouse over them. Hover detection and sharing were checked in game with two clients on November 8, 2026.
 - Herb and ore names are matched in French and English; other client languages learn names when gathering.
 - Addon messages only reach party or raid members; trial accounts cannot send addon messages on Forever.
 
@@ -86,7 +86,7 @@
 ## Limites connues
 
 - Expérimental : précision des icônes d'environ 10 à 30 m quand la minicarte est dézoomée.
-- Sur le client live restreint, seules les ressources survolées sont partagées ; détection au survol pas encore vérifiée en jeu.
+- Sur le client live restreint, seules les ressources survolées sont partagées : aucun addon ne voit plus les ressources de la minicarte sans la souris dessus. Détection au survol et partage vérifiés en jeu avec deux clients le 8 novembre 2026.
 - Noms d'herbes et de minerais reconnus en français et en anglais ; dans les autres langues, les noms sont appris à la récolte.
 - Les messages d'addon n'atteignent que les membres du groupe ou du raid ; les comptes d'essai ne peuvent pas en envoyer sur Forever.
 

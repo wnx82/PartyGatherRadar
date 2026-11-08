@@ -19,7 +19,8 @@
 --
 -- Survol : quand le joueur passe lui-même la souris sur un point de la minicarte, l'infobulle native sous le
 -- VRAI curseur est lue toutes les 0,2 s ; une herbe ou un minerai reconnu est suivi et partagé comme par le
--- balayage. Cette lecture marche sans le curseur logiciel.
+-- balayage. Cette lecture marche sans le curseur logiciel. La souris qui parcourt le point affine la position
+-- à chaque lecture : ce renvoi part au plus toutes les 2 s, et la dernière position part même après le survol.
 --
 -- Adaptation au client : une mise à jour de WoW Forever de novembre 2026 a restreint la sonde. Elle ne nomme
 -- plus un point que sous le vrai curseur (constat publié par NaowhForever_Professions 1.2.17), donc le
@@ -58,6 +59,7 @@ AutoDetect.INSIDE_FACTOR = 0.75    -- part du rayon de la minicarte où une abse
 AutoDetect.MAX_NODES = 150         -- même borne que MarkerManager.MAX_REAL_PER_SENDER
 AutoDetect.UNKNOWN_LOG_LIMIT = 30  -- noms inconnus journalisés (une fois chacun)
 AutoDetect.HOVER_INTERVAL = 0.2    -- secondes entre deux lectures de l'infobulle sous le vrai curseur
+AutoDetect.HOVER_RESEND_INTERVAL = 2 -- survol : position affinée renvoyée au plus toutes les 2 s
 AutoDetect.BLIND_EVIDENCE = 2      -- ressources survolées absentes d'un balayage vide : balayage aveugle
 AutoDetect.BLIND_RETRY_INTERVAL = 30 -- balayage aveugle : un essai toutes les 30 s pour repérer son retour
 AutoDetect.FAILURE_WARN_LIMIT = 5  -- balayages d'affilée interrompus par une erreur de sonde : alerte
@@ -308,18 +310,23 @@ local function UpdateNode(node, cluster, now)
 	node.misses = 0
 end
 
---- Marqueur local (jamais affiché sur sa propre minicarte, sauf réglage showOwnDetections) et envoi au groupe.
-local function Publish(node, sender, now, width, height)
-	ns.MarkerManager.Upsert({
-		sender = sender, id = node.id, source = "LIVE", kind = node.kind,
-		state = node.sentOnce and "UPDATED" or "DETECTED", uiMapID = node.mapID, x = node.x, y = node.y,
-		accuracy = node.accuracy, name = node.name, isLocal = true,
-	}, now)
-	local due = not node.lastSent or forceResend or now - node.lastSent >= AutoDetect.RESEND_INTERVAL
-		or Yards(width, height, node.sentX, node.sentY, node.x, node.y) >= AutoDetect.RESEND_MOVE_YARDS
-	if not due then
+--- Envoi au groupe quand il est dû : première annonce, rafraîchissement (RESEND_INTERVAL), nouvel arrivant
+--- (forceResend) ou position affinée de plus de RESEND_MOVE_YARDS. `minInterval` (survol) espace les renvois de
+--- position : la souris qui parcourt un point déplace la moyenne à chaque lecture. Un renvoi trop proche du
+--- précédent attend (resendPending) et part avec AutoDetect.FlushPendingResends.
+local function SendIfDue(node, now, width, height, minInterval)
+	local moved = node.lastSent ~= nil
+		and Yards(width, height, node.sentX, node.sentY, node.x, node.y) >= AutoDetect.RESEND_MOVE_YARDS
+	-- survol : l'espacement prime, même sur un renvoi demandé pour un nouveau membre
+	if minInterval and node.lastSent and now - node.lastSent < minInterval then
+		node.resendPending = moved or nil
 		return
 	end
+	node.resendPending = nil
+	if node.lastSent and not (forceResend or moved or now - node.lastSent >= AutoDetect.RESEND_INTERVAL) then
+		return
+	end
+	-- un échec d'envoi n'est pas réessayé ici : la prochaine lecture de la ressource le refait
 	local ok = ns.Sender.SendNode({
 		id = node.id, source = "LIVE", kind = node.kind, state = node.sentOnce and "UPDATED" or "DETECTED",
 		uiMapID = node.mapID, x = node.x, y = node.y, accuracy = node.accuracy, age = 0, resourceID = 0,
@@ -328,6 +335,16 @@ local function Publish(node, sender, now, width, height)
 	if ok then
 		node.lastSent, node.sentX, node.sentY, node.sentOnce = now, node.x, node.y, true
 	end
+end
+
+--- Marqueur local (jamais affiché sur sa propre minicarte, sauf réglage showOwnDetections) et envoi au groupe.
+local function Publish(node, sender, now, width, height, minInterval)
+	ns.MarkerManager.Upsert({
+		sender = sender, id = node.id, source = "LIVE", kind = node.kind,
+		state = node.sentOnce and "UPDATED" or "DETECTED", uiMapID = node.mapID, x = node.x, y = node.y,
+		accuracy = node.accuracy, name = node.name, isLocal = true,
+	}, now)
+	SendIfDue(node, now, width, height, minInterval)
 end
 
 local function Gone(node, sender, label)
@@ -511,10 +528,12 @@ local function Finish()
 		-- infobulle restée figée, pas de la sonde
 		local plausible = #current.hits > 0 and #current.hits <= #current.points * AutoDetect.RESTORE_MAX_SHARE
 		if not plausible then
-			-- toujours aveugle : rien à apprendre, aucune absence fiable
+			-- toujours aveugle : rien à apprendre, aucune absence fiable ; aucune ressource visible à renvoyer à
+			-- un nouveau membre (sans cette remise à zéro, chaque lecture au survol renverrait tout)
 			for _, node in pairs(nodes) do
 				node.hoverPending = nil
 			end
+			forceResend = false
 			PruneExpired(now)
 			return
 		end
@@ -740,10 +759,31 @@ function AutoDetect.ReadHover(now)
 		end
 		node.hoverAt = now
 		node.hoverPending = true
-		Publish(node, sender, now, width, height)
+		Publish(node, sender, now, width, height, AutoDetect.HOVER_RESEND_INTERVAL)
 	end
 	ns.Fire("PGR_MARKERS_CHANGED")
 	return #found
+end
+
+--- Envoie les positions affinées au survol restées en attente, une fois HOVER_RESEND_INTERVAL écoulé depuis
+--- le dernier envoi. La dernière position part aussi quand la souris a déjà quitté le point.
+function AutoDetect.FlushPendingResends(now)
+	if not ns.Config.Get("enabled") or not ns.Config.Get("autoDetect") then
+		return
+	end
+	if (InCombatLockdown and InCombatLockdown()) or AutoDetect.IsAddOnRestricted() then
+		return
+	end
+	for _, node in pairs(nodes) do
+		if node.resendPending and now - node.lastSent >= AutoDetect.HOVER_RESEND_INTERVAL then
+			local width, height = ns.Coordinates.GetMapSizeYards(node.mapID)
+			if width then
+				SendIfDue(node, now, width, height, AutoDetect.HOVER_RESEND_INTERVAL)
+			else
+				node.resendPending = nil
+			end
+		end
+	end
 end
 
 ---------------------------------------------------------------------------
@@ -887,7 +927,9 @@ ns.On("PGR_CONFIG_LOADED", "AutoDetect", function()
 	end
 	ns.NewTicker(AutoDetect.PASS_INTERVAL, "AutoDetect", AutoDetect.StartPass)
 	ns.NewTicker(AutoDetect.HOVER_INTERVAL, "AutoDetect", function()
-		AutoDetect.ReadHover(ns.Now())
+		local now = ns.Now()
+		AutoDetect.ReadHover(now)
+		AutoDetect.FlushPendingResends(now)
 	end)
 	ns.RegisterEvent("UNIT_SPELLCAST_SENT", "AutoDetect", OnSpellcastSent)
 	ns.RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", "AutoDetect", OnSpellcastSucceeded)

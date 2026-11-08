@@ -1,6 +1,6 @@
 # PartyGatherRadar — Faisabilité et limitations techniques
 
-Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-11-08 pour la version 0.4.0.
+Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-11-08 pour la version 0.4.1.
 
 Légende des niveaux de confiance :
 
@@ -18,8 +18,8 @@ Légende des niveaux de confiance :
 > **Novembre 2026 : sonde restreinte.** Une mise à jour du client WoW Forever de novembre 2026 limite
 > `Minimap:UpdateMouseoverAtPoint` : la sonde ne nomme plus un point que sous le **vrai** curseur, donc le
 > balayage de la minicarte ne lit plus rien, sans erreur (constat publié par NaowhForever_Professions
-> 1.2.17, qui a retiré sa fonction équivalente ; Constaté (tiers), pas encore constaté par ce projet en
-> jeu). La 0.4.0 s'y adapte seule : détection au survol, voir § 3.A.
+> 1.2.17, qui a retiré sa fonction équivalente ; Constaté (tiers), puis **constaté en jeu** par ce projet
+> le 2026-11-08, build 70862). La 0.4.0 s'y adapte seule : détection au survol, voir § 3.A.
 
 ## 1. Client ciblé
 
@@ -40,7 +40,7 @@ PartyGatherRadar identifie Forever par le numéro d'interface (16000 à 19999) e
 | Capacité | Verdict | Mécanisme retenu | Confiance |
 |---|---|---|---|
 | **A. Énumérer les points de pistage de la minicarte** | **Impossible** | Aucune API : les 23 fonctions `C_Minimap` n'en listent aucun ; l'événement `MINIMAP_UPDATE_TOOLTIP` n'existe pas | Confirmé (doc) |
-| **A. Lire le nom d'un point sous un survol** | Possible | `C_TooltipInfo.GetMinimapMouseover()` (données de l'infobulle native) ; sous le vrai curseur : **détection au survol** (0.4.0) | Confirmé (doc) ; **vérifié en jeu** par le balayage (2026-10-15) ; survol de la 0.4.0 non vérifié en jeu |
+| **A. Lire le nom d'un point sous un survol** | Possible | `C_TooltipInfo.GetMinimapMouseover()` (données de l'infobulle native) ; sous le vrai curseur : **détection au survol** (0.4.0) | Confirmé (doc) ; **vérifié en jeu** par le balayage (2026-10-15) ; **survol vérifié en jeu** (2026-11-08, build 70862 : lecture et réception par le groupe) |
 | **A. Sonder la minicarte sans bouger la souris** | **Bloqué depuis novembre 2026** | `Minimap:SetUsingSoftCursor(bool)` + `Minimap:UpdateMouseoverAtPoint(x, y)` : fonctions **propres à la branche Forever** | Confirmé (doc) ; **vérifié en jeu** (2026-10-15, 293 points sans erreur ; plantes partagées dans le journal du client live) ; depuis la mise à jour de novembre 2026, ne nomme plus qu'un point sous le vrai curseur (Constaté (tiers)) |
 | A. Position d'un point détecté | Approximative | Grille de sondage → décalage en unités de minicarte → mètres (`C_Minimap.GetViewRadius`) → coordonnées de carte | Calcul testé hors jeu ; en jeu, joueurs retrouvés à 0,3 m et 8 m (près du centre) ; échelle à distance non vérifiée |
 | A. Identifiant de ressource | Indisponible | L'infobulle ne donne que des noms localisés | Confirmé (doc : données d'infobulle) |
@@ -104,6 +104,12 @@ détection au survol, choisi automatiquement (§ 3.A).
   - constat (tiers) : depuis une mise à jour du client Forever de novembre 2026, la sonde ne nomme plus un
     point que sous le vrai curseur. Le balayage ne renvoie ni erreur ni valeur secrète, seulement aucun
     nom : sans adaptation, la détection s'arrête en silence ;
+  - **constaté en jeu** le 2026-11-08 (build 70862, deux clients) : 5 balayages sans aucun nom, puis deux
+    plantes survolées (Feuillargent, Pacifique) lues, partagées et reçues par l'autre client ; mode survol
+    choisi seul et mémorisé (`blindBuild = "70862"`) ;
+  - **renvoi espacé (0.4.1)** : la souris qui parcourt un point déplace la position estimée à chaque
+    lecture (4 messages en 0,6 s vus en jeu). Une position affinée est renvoyée au plus toutes les 2 s, et
+    la dernière part même après le survol. L'arrivée d'un membre ne lève pas cet espacement ;
   - **détection au survol** : quand le joueur passe la souris sur un point de sa minicarte, l'infobulle
     native est lue toutes les 0,2 s (sans curseur logiciel). Une herbe ou un minerai reconnu est placé
     sous le curseur, suivi et partagé comme une détection du balayage. Toujours active, même quand le
@@ -173,13 +179,15 @@ détection au survol, choisi automatiquement (§ 3.A).
 - Les icônes peuvent recouvrir des points natifs (quêtes) : taille 14 px et transparence 0,9 par défaut,
   réglables.
 
-## 4. Limitations connues de la version 0.4.0
+## 4. Limitations connues de la version 0.4.1
 
 1. Sur le client live restreint (novembre 2026), seule la **détection au survol** fonctionne : une
    ressource n'est partagée que si le joueur passe la souris dessus sur sa minicarte. Elle n'est pas
    déclarée disparue par le balayage : elle expire, sauf une herbe cueillie par le joueur. Un filon miné
-   n'est pas retiré (il peut souvent être miné plusieurs fois). Le passage automatique en mode survol,
-   la position sous le curseur et le retour au balayage ne sont **pas encore vérifiés en jeu**.
+   n'est pas retiré (il peut souvent être miné plusieurs fois). Aucune détection sans survol n'est
+   possible sur ce client : aucune API ne donne les points de la minicarte, et la sonde ne lit plus que
+   sous le vrai curseur. Le passage automatique en mode survol est vérifié en jeu (2026-11-08) ; la
+   précision sous le curseur, l'icône chez l'autre client et le retour au balayage ne le sont pas encore.
    Détection par balayage (clients non restreints) : coût en images par seconde et effet sur
    l'infobulle native non mesurés.
 2. Tri par noms : une herbe absente de la liste (nom français mal orthographié, autre langue que le
