@@ -61,10 +61,10 @@ return function(H, root)
 		H.eq(#peersA, 1)
 		H.eq(peersA[1].name, "Aedot-Realm")
 		H.eq(peersA[1].peer.compatible, true)
-		H.eq(peersA[1].peer.addonVersion, "0.4.0")
+		H.eq(peersA[1].peer.addonVersion, "0.4.1")
 		H.eq(#peersB, 1)
 		H.eq(peersB[1].name, "Aekiss-Realm")
-		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.4.0"), "annonce de découverte")
+		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.4.1"), "annonce de découverte")
 		H.eq(peersA[1].peer.messages, #b.sent, "un message compté une seule fois")
 		H.ok(#a.sent <= 2 and #b.sent <= 2, "au plus un HELLO et une réponse par client")
 		local before = #a.sent + #b.sent
@@ -822,7 +822,7 @@ return function(H, root)
 		local _, a = Grouped()
 		local button = a.ns.MinimapButton.GetFrame()
 		button.scripts.OnEnter(button)
-		H.eq(a.tooltipLines[1], "PartyGatherRadar 0.4.0")
+		H.eq(a.tooltipLines[1], "PartyGatherRadar 0.4.1")
 		H.eq(a.tooltipLines[2], "groupe : 1 autre(s) membre(s), 1 avec PartyGatherRadar")
 		NoErrors(a)
 	end)
@@ -841,10 +841,10 @@ return function(H, root)
 		a:Slash("")
 		H.eq(a.ns.SettingsPanel.IsOpen(), true, "fenêtre ouverte")
 		local version, summary = a.ns.SettingsPanel.GetHeaderTexts()
-		H.eq(version, "version 0.4.0, protocole 1 — client 1.60.1 (build 70374)")
+		H.eq(version, "version 0.4.1, protocole 1 — client 1.60.1 (build 70374)")
 		H.eq(summary, "2 autre(s) membre(s), 1 avec PartyGatherRadar")
 		local texts = a.ns.SettingsPanel.GetMemberTexts()
-		H.ok(Contains(texts, "Aedot Wnx — |cff40ff40PartyGatherRadar 0.4.0|r"), "membre avec l'addon")
+		H.ok(Contains(texts, "Aedot Wnx — |cff40ff40PartyGatherRadar 0.4.1|r"), "membre avec l'addon")
 		H.ok(Contains(texts, "Carl Zed — |cff9d9d9dsans addon détecté|r"), "membre sans l'addon")
 		world:SetGroup({ a })
 		world:Advance(1)
@@ -1538,6 +1538,92 @@ return function(H, root)
 		a.inCombat = false
 		world:Advance(0.5)
 		H.eq(#Received(b, "Pacifique"), 1, "lue après le combat")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	-- vu en jeu (0.4.1) : une herbe survolée a donné 4 messages en 0,6 s, car la souris qui parcourt le point
+	-- déplace la position estimée de plus de 8 m à chaque lecture
+	local JITTER = { { 8, 0 }, { -8, 0 }, { 0, 8 }, { 0, -8 }, { 6, 6 }, { -6, -6 } }
+
+	--- Survole la ressource pendant `seconds` en bougeant la souris sur son point (une position par 0,1 s).
+	local function HoverJittering(world, client, blip, seconds)
+		HoverOver(client, blip)
+		local baseX, baseY = client.cursorX, client.cursorY
+		for i = 1, math.floor(seconds * 10 + 0.5) do
+			local offset = JITTER[(i - 1) % #JITTER + 1]
+			client.cursorX, client.cursorY = baseX + offset[1], baseY + offset[2]
+			world:Advance(0.1)
+		end
+	end
+
+	--- Marqueur local (position suivie par le détecteur) de la ressource `name`.
+	local function LocalMarker(client, name)
+		local found
+		client.ns.MarkerManager.ForEach(function(marker)
+			if marker.name == name and marker.isLocal then
+				found = marker
+			end
+		end, client.world.time)
+		return found
+	end
+
+	H.test("souris qui bouge sur une herbe survolée : un renvoi de position au plus toutes les 2 s", function()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		local herb = Herb("Pacifique", 40, 30)
+		a.worldBlips = { herb }
+		world:Advance(3)
+		HoverJittering(world, a, herb, 1)
+		H.eq(CountSent(a, "N"), 1, "première seconde : l'annonce seule")
+		HoverJittering(world, a, herb, 1.5)
+		H.eq(CountSent(a, "N"), 2, "un renvoi après 2 s")
+		HoverJittering(world, a, herb, 3.5)
+		H.ok(CountSent(a, "N") <= 4, "au plus un renvoi par 2 s : " .. CountSent(a, "N") .. " envois en 6 s")
+		local list = Received(b, "Pacifique")
+		H.eq(#list, 1, "une seule herbe chez Aedot")
+		local distance = b.ns.MarkerManager.DistanceYards(ELWYNN, list[1].marker.x, list[1].marker.y, herb.x, herb.y)
+		H.ok(distance <= 15, string.format("position à %.1f m de la plante", distance))
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("position affinée en attente : envoyée après le survol", function()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		local herb = Herb("Pacifique", 40, 30)
+		a.worldBlips = { herb }
+		world:Advance(3)
+		HoverJittering(world, a, herb, 0.6)
+		a.mouseOverMinimap = false
+		H.eq(CountSent(a, "N"), 1, "renvoi encore en attente")
+		world:Advance(2.5)
+		H.eq(CountSent(a, "N"), 2, "dernière position envoyée une fois le délai écoulé")
+		local tracked, list = LocalMarker(a, "Pacifique"), Received(b, "Pacifique")
+		H.ok(tracked ~= nil and #list == 1, "herbe suivie et reçue")
+		local gap = b.ns.MarkerManager.DistanceYards(ELWYNN, list[1].marker.x, list[1].marker.y, tracked.x, tracked.y)
+		H.ok(gap < 0.5, string.format("Aedot a la position affinée (écart %.2f m)", gap))
+		world:Advance(10)
+		H.eq(CountSent(a, "N"), 2, "rien de plus sans nouveau survol")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("mode survol, nouveau membre : pas de renvoi à chaque lecture au survol", function()
+		local world, a, b, h1 = BlindPair()
+		-- un membre arrive : les ressources visibles lui sont renvoyées au prochain balayage
+		a.ns.Fire("PGR_PEERS_CHANGED")
+		local before = CountSent(a, "N")
+		HoverOver(a, h1)
+		world:Advance(3)
+		local sent = CountSent(a, "N") - before
+		H.ok(sent <= 2, "au plus un envoi par 2 s juste après l'arrivée : " .. sent)
+		a.mouseOverMinimap = false
+		world:Advance(35)
+		before = CountSent(a, "N")
+		HoverOver(a, h1)
+		world:Advance(3)
+		H.eq(CountSent(a, "N") - before, 1, "après un balayage aveugle : un seul rafraîchissement")
 		NoErrors(a)
 		NoErrors(b)
 	end)

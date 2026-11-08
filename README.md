@@ -3,7 +3,7 @@
 Addon pour **World of Warcraft: Forever** (1.60.1, interface 16001) : partager en temps réel,
 entre membres d'un groupe, les ressources de récolte (herbes, minerais) détectées sur la minicarte.
 
-> **État : prototype 0.4.0.** Détection des herbes et minerais de la minicarte et partage au groupe
+> **État : prototype 0.4.1.** Détection des herbes et minerais de la minicarte et partage au groupe
 > (phases 2 et 3, expérimental), bouton de minicarte et fenêtre de réglages. Le tout est testé hors jeu
 > (simulation de plusieurs clients). **Vérifié en jeu** (2026-10-15, deux clients) : chargement, sondes
 > d'API, identité, communication de groupe, lecture des plantes par le balayage ; le journal du client
@@ -13,8 +13,10 @@ entre membres d'un groupe, les ressources de récolte (herbes, minerais) détect
 > distance (la sonde ne nomme plus un point que sous le vrai curseur). La 0.4.0 s'adapte seule : elle
 > repère le balayage aveugle, prévient une fois dans la discussion et passe en **détection au survol** :
 > passer la souris sur une plante de sa minicarte la partage au groupe. Si Blizzard rouvre la sonde, la
-> détection automatique revient seule. **Pas encore vérifié en jeu** : détection au survol, passage
-> automatique d'un mode à l'autre, bouton et fenêtre de réglages. Voir [Tests/TestPlan.md](Tests/TestPlan.md).
+> détection automatique revient seule. **Vérifié en jeu** (2026-11-08, build 70862, deux clients) :
+> balayage aveugle repéré, passage automatique en mode survol, plante survolée lue, partagée et reçue.
+> **Pas encore vérifié en jeu** : icône affichée chez l'autre client, retour au balayage, bouton et
+> fenêtre de réglages. Voir [Tests/TestPlan.md](Tests/TestPlan.md).
 
 ## Objectif
 
@@ -27,7 +29,7 @@ propre minicarte. Le partage fonctionne dans les deux sens et prévoit les miner
 | Capacité | Verdict |
 |---|---|
 | Lister les points de pistage de la minicarte | **Impossible** : aucune API |
-| Lire le nom d'un point sous le vrai curseur (survol) | Possible (détection au survol, 0.4.0, non vérifiée en jeu) ; les noms lus doivent être triés (quêtes, joueurs) |
+| Lire le nom d'un point sous le vrai curseur (survol) | **Vérifié en jeu** (détection au survol, 2026-11-08) ; les noms lus doivent être triés (quêtes, joueurs) |
 | Sonder la minicarte à distance (sondage officiel propre à Forever) | **Vérifié en jeu** (balayage, 2026-10-15) ; **bloqué** depuis une mise à jour de novembre 2026 |
 | Communiquer entre membres du groupe (messages d'addon) | **Vérifié en jeu** entre deux clients (0.1.1) |
 | Afficher des icônes personnalisées sur la minicarte | Possible, non vérifié en jeu |
@@ -39,7 +41,7 @@ externe, aucune automatisation de déplacement, d'interaction ou de récolte, au
 artificiellement chez un joueur qui ne le possède pas. Aucune position n'est inventée : sans donnée
 fiable, rien n'est affiché.
 
-## Fonctionnalités de la version 0.4.0
+## Fonctionnalités de la version 0.4.1
 
 Réellement implémenté :
 
@@ -81,7 +83,7 @@ réglages avancés (taille, couleurs, durées) dans la fenêtre (phase 4).
 Chemin cible : `World of Warcraft\_forever_\Interface\AddOns\PartyGatherRadar\` (client live ; la bêta
 utilisait `_classic_beta_`)
 
-**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.4.0.zip` dans le dossier `AddOns` ; le ZIP
+**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.4.1.zip` dans le dossier `AddOns` ; le ZIP
 contient déjà le dossier `PartyGatherRadar\`. Vérifier que le chemin final est
 `AddOns\PartyGatherRadar\PartyGatherRadar.toc` (et non `AddOns\PartyGatherRadar\PartyGatherRadar\…`).
 
@@ -117,7 +119,7 @@ n'est nécessaire.
 ## Premier essai à deux
 
 1. Installer l'addon chez les deux joueurs, se grouper.
-2. Chacun voit « <autre> utilise PartyGatherRadar 0.4.0 ». Sinon : `/pgr status` et `/pgr diag`.
+2. Chacun voit « <autre> utilise PartyGatherRadar 0.4.1 ». Sinon : `/pgr status` et `/pgr diag`.
 3. Aekiss active Découverte d'herbes et s'approche de plantes : en quelques secondes, Aedot voit une
    icône verte à l'emplacement de chaque plante sur sa propre minicarte (survol : le nom de la plante
    en titre, « Détecté par : Aekiss »). Rien à taper : la détection est automatique.
