@@ -401,6 +401,10 @@ function Diagnostics.RunProbes()
 	ProbeLive(results, "detection.minimapProbeApi", function()
 		-- Sondage officiel par point (client Forever) : expérimental, peut être restreint par Blizzard.
 		local found = ns.Tracking and ns.Tracking.FindBlipApis() or {}
+		if #found == 3 and ns.AutoDetect and ns.AutoDetect.IsProbeBlind() then
+			return Diagnostics.WARN, "présente mais restreinte par le client (ne nomme un point que sous le vrai "
+				.. "curseur) : détection au survol seule"
+		end
 		if #found == 3 then
 			return Diagnostics.WARN, "disponible (expérimental) : " .. table.concat(found, ", ")
 		end
@@ -455,7 +459,9 @@ function Diagnostics.GetCapabilities()
 	-- A. Détection locale des ressources de la minicarte
 	local probeApis = ns.Tracking and #ns.Tracking.FindBlipApis() == 3
 	local autoFound = ns.AutoDetect and ns.AutoDetect.stats.found or 0
-	if autoFound > 0 then
+	if ns.AutoDetect and ns.AutoDetect.IsProbeBlind() then
+		caps.localDetection = { status = "PARTIEL", detail = ns.T("CAP_DETECTION_HOVER", autoFound) }
+	elseif autoFound > 0 then
 		caps.localDetection = { status = "PARTIEL", detail = ns.T("CAP_DETECTION_AUTO", autoFound) }
 	elseif Diagnostics.flags.minimapTooltipSeen then
 		caps.localDetection = { status = "PARTIEL", detail = ns.T("CAP_DETECTION_TOOLTIP") }

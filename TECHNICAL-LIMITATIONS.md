@@ -1,6 +1,6 @@
 # PartyGatherRadar — Faisabilité et limitations techniques
 
-Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-11-04 pour la version 0.3.2.
+Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-11-08 pour la version 0.4.0.
 
 Légende des niveaux de confiance :
 
@@ -14,6 +14,12 @@ Légende des niveaux de confiance :
 > identité et communication de groupe vérifiés. La détection sur la minicarte et l'affichage des icônes
 > ne le sont pas encore. Les tests automatisés hors jeu (Lua 5.1 + bouchons d'API) valident la logique de
 > l'addon, pas le comportement du client. Voir `Tests/TestPlan.md`.
+>
+> **Novembre 2026 : sonde restreinte.** Une mise à jour du client WoW Forever de novembre 2026 limite
+> `Minimap:UpdateMouseoverAtPoint` : la sonde ne nomme plus un point que sous le **vrai** curseur, donc le
+> balayage de la minicarte ne lit plus rien, sans erreur (constat publié par NaowhForever_Professions
+> 1.2.17, qui a retiré sa fonction équivalente ; Constaté (tiers), pas encore constaté par ce projet en
+> jeu). La 0.4.0 s'y adapte seule : détection au survol, voir § 3.A.
 
 ## 1. Client ciblé
 
@@ -24,6 +30,7 @@ Légende des niveaux de confiance :
 | Interface TOC | 16001 | Confirmé (local : plus de 30 addons Forever installés l'utilisent ; wiki Patch 1.60.1) |
 | Famille d'API | Mainline 12.x (« la grande majorité des API de 12.1.5 »), restrictions de Midnight et valeurs secrètes actives | Confirmé (annonce Blizzard citée par le wiki) |
 | Identification | `WOW_PROJECT_ID == WOW_PROJECT_CAMELOT` (18) ; un addon installé signale que certaines builds renvoient `WOW_PROJECT_MAINLINE` | Constaté (tiers) |
+| Client live | produit `wowf`, dossier `_forever_`, build 1.60.1.70862 (2026-11-08), interface 16001 inchangée | Confirmé (local, `.build.info`) ; `/pgr diag` d'Aedot sur ce build |
 
 PartyGatherRadar identifie Forever par le numéro d'interface (16000 à 19999) et, en complément, par
 `WOW_PROJECT_CAMELOT`. `/pgr version` affiche la build réellement utilisée via `GetBuildInfo()`.
@@ -33,12 +40,12 @@ PartyGatherRadar identifie Forever par le numéro d'interface (16000 à 19999) e
 | Capacité | Verdict | Mécanisme retenu | Confiance |
 |---|---|---|---|
 | **A. Énumérer les points de pistage de la minicarte** | **Impossible** | Aucune API : les 23 fonctions `C_Minimap` n'en listent aucun ; l'événement `MINIMAP_UPDATE_TOOLTIP` n'existe pas | Confirmé (doc) |
-| **A. Lire le nom d'un point sous un survol** | Possible | `C_TooltipInfo.GetMinimapMouseover()` (données de l'infobulle native) | Confirmé (doc) ; **vérifié en jeu** par le balayage (2026-10-15) |
-| **A. Sonder la minicarte sans bouger la souris** | Possible, **expérimental** | `Minimap:SetUsingSoftCursor(bool)` + `Minimap:UpdateMouseoverAtPoint(x, y)` : fonctions **propres à la branche Forever** | Confirmé (doc) ; utilisé par NodeSight ; **vérifié en jeu** (2026-10-15, 293 points sans erreur) ; clignotement de l'infobulle non vérifié |
+| **A. Lire le nom d'un point sous un survol** | Possible | `C_TooltipInfo.GetMinimapMouseover()` (données de l'infobulle native) ; sous le vrai curseur : **détection au survol** (0.4.0) | Confirmé (doc) ; **vérifié en jeu** par le balayage (2026-10-15) ; survol de la 0.4.0 non vérifié en jeu |
+| **A. Sonder la minicarte sans bouger la souris** | **Bloqué depuis novembre 2026** | `Minimap:SetUsingSoftCursor(bool)` + `Minimap:UpdateMouseoverAtPoint(x, y)` : fonctions **propres à la branche Forever** | Confirmé (doc) ; **vérifié en jeu** (2026-10-15, 293 points sans erreur ; plantes partagées dans le journal du client live) ; depuis la mise à jour de novembre 2026, ne nomme plus qu'un point sous le vrai curseur (Constaté (tiers)) |
 | A. Position d'un point détecté | Approximative | Grille de sondage → décalage en unités de minicarte → mètres (`C_Minimap.GetViewRadius`) → coordonnées de carte | Calcul testé hors jeu ; en jeu, joueurs retrouvés à 0,3 m et 8 m (près du centre) ; échelle à distance non vérifiée |
 | A. Identifiant de ressource | Indisponible | L'infobulle ne donne que des noms localisés | Confirmé (doc : données d'infobulle) |
 | A. Type herbe / minerai | Indirect | Table de noms (français, anglais, sans accents), forme des noms de gisements, noms appris à la récolte (`Detection/ResourceNames.lua`) | Testé hors jeu ; « Pacifique » et « Eglantine » vus en jeu |
-| A. Disparition d'une ressource | Partielle | Absence lors d'un nouveau balayage *dans le rayon* = incertaine ; récolte par le joueur détectable (`UNIT_SPELLCAST_SENT`, butin) | Analyse ; cible du sort potentiellement secrète |
+| A. Disparition d'une ressource | Partielle | Absence lors d'un nouveau balayage *dans le rayon* ; herbe cueillie par le joueur (`UNIT_SPELLCAST_SENT` puis `UNIT_SPELLCAST_SUCCEEDED`) retirée tout de suite ; sinon expiration | Testé hors jeu ; cible du sort potentiellement secrète |
 | **B. Communication de groupe** | Possible | `C_ChatInfo.RegisterAddonMessagePrefix`, `SendAddonMessage`, `CHAT_MSG_ADDON`, canaux PARTY / RAID / INSTANCE_CHAT | Confirmé (doc + DBM, BigWigs, EkinoksXP installés l'utilisent) ; **vérifié en jeu** entre deux clients (PARTY, 0.1.1, 2026-10-15) |
 | **C. Icônes personnalisées sur la minicarte** | Possible | Cadres enfants de `Minimap`, positionnés depuis `C_Map` + `C_Minimap.GetViewRadius` | Confirmé (doc, HereBeDragons et TomTom le font sur Forever) ; non vérifié en jeu |
 | C. Suivi des déplacements, du zoom, des changements de carte | Possible | Rafraîchissement 10 Hz quand des marqueurs existent ; conversions officielles carte ↔ monde | Testé hors jeu |
@@ -53,6 +60,10 @@ ces fonctions ne sont documentées que par leur signature, aucune exécution en 
 leur comportement dans ce projet, et Blizzard peut les restreindre à tout moment pendant la bêta.
 Le mode de secours (positions de récolte, marqueurs manuels) reste donc nécessaire et sera
 développé en phase 2/3, clairement séparé des détections actives.
+
+**Mise à jour du 2026-11-08** : la restriction de novembre a confirmé ce risque. Le sondage à distance ne
+voit plus rien ; seule la lecture sous le vrai curseur reste possible. La 0.4.0 en fait un mode de
+détection au survol, choisi automatiquement (§ 3.A).
 
 ## 3. Détails par capacité
 
@@ -89,6 +100,30 @@ développé en phase 2/3, clairement séparé des détections actives.
   donc trier les noms (phase 2).
 - **Valeurs secrètes** : la documentation ne marque pas `GetMinimapMouseover` comme secret ; chaque
   lecture est néanmoins protégée par `issecretvalue`.
+- **Restriction de novembre 2026 et adaptation (0.4.0)** :
+  - constat (tiers) : depuis une mise à jour du client Forever de novembre 2026, la sonde ne nomme plus un
+    point que sous le vrai curseur. Le balayage ne renvoie ni erreur ni valeur secrète, seulement aucun
+    nom : sans adaptation, la détection s'arrête en silence ;
+  - **détection au survol** : quand le joueur passe la souris sur un point de sa minicarte, l'infobulle
+    native est lue toutes les 0,2 s (sans curseur logiciel). Une herbe ou un minerai reconnu est placé
+    sous le curseur, suivi et partagé comme une détection du balayage. Toujours active, même quand le
+    balayage marche ;
+  - **balayage aveugle** : une ressource vue au survol moins de 10 s avant le balayage suivant, absente de
+    ce balayage alors qu'il n'a lu aucune ressource, est une preuve. Une preuve vaut pour une ressource
+    physique (même nom à moins de 50 m : une seule preuve), compte 10 min, et toutes sont effacées dès
+    qu'un balayage lit une ressource (la sonde marche : l'absence venait d'une plante cueillie par un
+    autre). Après 2 preuves, le balayage est déclaré aveugle : un avertissement dans la discussion, un
+    essai toutes les 30 s au lieu de 2 s, plus de capacité « sondage minicarte » annoncée au groupe
+    (nouveau HELLO à chaque changement de mode). Le mode est mémorisé pour le build du client
+    (`PartyGatherRadarDB.probe.blindBuild`) et réévalué à chaque nouveau build ; un essai qui relit une
+    ressource sur au plus la moitié de ses points rétablit la détection automatique (une ressource lue
+    partout vient d'une infobulle restée figée, pas de la sonde) ;
+  - une ressource vue seulement au survol n'est jamais retirée par un balayage qui n'a lu aucune
+    ressource : elle expire (récente 60 s, incertaine 240 s) ou disparaît à la cueillette ;
+  - **échecs répétés** : 5 balayages d'affilée interrompus par la sonde elle-même (erreur, valeur
+    secrète) affichent un avertissement unique ; des fonctions de sondage retirées du client aussi ;
+  - **restrictions d'addons** (`C_RestrictedActions.IsAddOnRestrictionActive` : combat, rencontre, mode
+    défi, JcJ, carte) : ni balayage ni lecture au survol pendant qu'elles sont actives.
 
 ### B. Communication
 
@@ -138,16 +173,22 @@ développé en phase 2/3, clairement séparé des détections actives.
 - Les icônes peuvent recouvrir des points natifs (quêtes) : taille 14 px et transparence 0,9 par défaut,
   réglables.
 
-## 4. Limitations connues de la version 0.3.2
+## 4. Limitations connues de la version 0.4.0
 
-1. Détection automatique **non vérifiée en jeu** : précision à distance, coût en images par seconde,
-   effet éventuel sur l'infobulle native (le sondage s'arrête quand la souris survole la minicarte).
+1. Sur le client live restreint (novembre 2026), seule la **détection au survol** fonctionne : une
+   ressource n'est partagée que si le joueur passe la souris dessus sur sa minicarte. Elle n'est pas
+   déclarée disparue par le balayage : elle expire, sauf une herbe cueillie par le joueur. Un filon miné
+   n'est pas retiré (il peut souvent être miné plusieurs fois). Le passage automatique en mode survol,
+   la position sous le curseur et le retour au balayage ne sont **pas encore vérifiés en jeu**.
+   Détection par balayage (clients non restreints) : coût en images par seconde et effet sur
+   l'infobulle native non mesurés.
 2. Tri par noms : une herbe absente de la liste (nom français mal orthographié, autre langue que le
    français ou l'anglais) est ignorée jusqu'à sa première récolte, qui l'apprend. Les noms ignorés sont
    dans le journal (« nom ignoré »). Deux plantes du même nom à moins d'environ 50 m (zoom minimal)
    donnent un seul marqueur. Deux herboristes qui voient la même plante peuvent produire deux
    marqueurs à plus de 5 m l'un de l'autre (fusion limitée à 5 m).
-3. Pas de mode de secours (positions de récolte, marqueurs manuels) : phase 2/3.
+3. Mode de secours partiel : détection au survol et retrait à la cueillette (0.4.0). Pas encore de
+   positions de récolte partagées ni de marqueurs manuels (phase 2/3).
 4. Fenêtre de réglages simple (cases à cocher) : taille, couleurs et durées seulement dans
    `PartyGatherRadarDB.settings` (phase 4). Bouton et fenêtre non encore vérifiés en jeu.
 5. Pas d'affichage sur la carte du monde : phase 3.
@@ -177,3 +218,6 @@ développé en phase 2/3, clairement séparé des détections actives.
   https://www.curseforge.com/wow/addons/node-sight
 - GatherMate2 (détection à la récolte, protections contre les valeurs secrètes) —
   https://github.com/Nevcairiel/GatherMate2
+- NaowhForever_Professions 1.2.17, `README.md` (installé le 2026-11-08) : « A Forever update in November
+  2026 stopped that: the probe now names a node only under the real cursor (#918) ». Lu pour le constat,
+  **aucun code copié**.

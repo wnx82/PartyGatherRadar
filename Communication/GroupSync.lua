@@ -50,7 +50,8 @@ function GroupSync.GetLocalCaps()
 	if tracking and tracking.ores then
 		caps = caps + CAPS.ORE_TRACKING
 	end
-	if ns.Tracking and #ns.Tracking.FindBlipApis() == 3 then
+	-- sondage annoncé seulement s'il voit encore quelque chose (client non restreint)
+	if ns.Tracking and #ns.Tracking.FindBlipApis() == 3 and not (ns.AutoDetect and ns.AutoDetect.IsProbeBlind()) then
 		caps = caps + CAPS.MINIMAP_PROBE
 	end
 	return caps
@@ -395,4 +396,10 @@ ns.On("PGR_SETTING_CHANGED", "GroupSync", function(_, key, value)
 			ns.Sender.SendBye()
 		end
 	end
+end)
+
+-- balayage déclaré aveugle ou rétabli : la capacité « sondage minicarte » annoncée au groupe change
+ns.On("PGR_DETECTION_MODE_CHANGED", "GroupSync", function()
+	lastHelloAt = -HELLO_MIN_INTERVAL
+	GroupSync.RequestHello("mode de détection")
 end)

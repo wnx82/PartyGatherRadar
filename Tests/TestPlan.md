@@ -1,4 +1,4 @@
-# Plan de tests — PartyGatherRadar 0.3.2
+# Plan de tests — PartyGatherRadar 0.4.0
 
 Deux niveaux de tests :
 
@@ -50,6 +50,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 122 réussis, 0 échec (0.3.0) |
 | 2026-10-15 | Lua 5.1 embarqué (lupa) | 123 réussis, 0 échec (0.3.1) |
 | 2026-11-04 | Lua 5.1 embarqué (lupa) | 124 réussis, 0 échec (0.3.2) |
+| 2026-11-08 | Lua 5.1 embarqué (lupa) | 139 réussis, 0 échec (0.4.0) |
 
 ## 2. Tests en jeu
 
@@ -153,9 +154,9 @@ vérifient l'alignement avec le marqueur TEST de `/pgr test`.
 | Étape | Résultat attendu | Statut |
 |---|---|---|
 | Connexion | Bouton (icône de fleur) sur le bord de la minicarte, en bas à gauche | Non exécuté |
-| Survol du bouton | Infobulle : « PartyGatherRadar 0.3.2 », membres du groupe et nombre avec l'addon | Non exécuté |
+| Survol du bouton | Infobulle : « PartyGatherRadar 0.4.0 », membres du groupe et nombre avec l'addon | Non exécuté |
 | Glisser le bouton, `/reload` | Le bouton suit le bord de la minicarte et garde sa place après `/reload` | Non exécuté |
-| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.3.2 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
+| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.4.0 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
 | Aedot `/pgr test`, Aekiss décoche « Afficher les infos des autres joueurs » | Le marqueur TEST d'Aedot disparaît de la minicarte d'Aekiss, puis revient quand la case est recochée | Non exécuté |
 | Décocher « Bouton autour de la minicarte » | Bouton masqué ; `/pgr` rouvre la fenêtre ; `/pgr button on` le réaffiche | Non exécuté |
 
@@ -172,6 +173,24 @@ vérifient l'alignement avec le marqueur TEST de `/pgr test`.
 | Case « Afficher aussi mes propres détections » chez Aekiss | Icônes superposées aux points natifs (capture, zoom minimal et maximal) | Non exécuté |
 | Aedot décoche « Afficher les infos des autres joueurs » | Icônes masquées, puis revenues au plus tard 25 s après la nouvelle coche | Non exécuté |
 | Après l'essai : `/pgr diag` puis `/reload` chez les deux | `lastReport` : ligne `detection.auto` (balayages, ressources, noms ignorés) | Non exécuté |
+
+### Scénario 11 — Client live restreint : détection au survol (0.4.0)
+
+Contexte : depuis une mise à jour de WoW Forever de novembre 2026, la sonde ne nomme plus un point de la
+minicarte que sous le vrai curseur (constat tiers). Le journal sauvegardé d'Aedot sur le client live
+montre des plantes détectées par Aekiss et reçues avant cette restriction ; aucun essai de la 0.4.0 n'a
+encore eu lieu.
+
+| Étape | Résultat attendu | Statut |
+|---|---|---|
+| Aekiss, Découverte d'herbes active, près de plantes, souris hors de la minicarte | Rien n'est partagé (balayage aveugle) ; `/pgr status` : balayages comptés, 0 trouvée | Non exécuté |
+| Aekiss passe la souris sur une plante de sa minicarte | Chez Aedot : icône verte au même endroit, titre = nom de la plante ; journal d'Aekiss : « herbe : … (survol) » | Non exécuté |
+| Aekiss survole une 2ᵉ plante, puis retire la souris quelques secondes | Message unique « Détection au survol activée » ; `/pgr status` : « mode survol (balayage aveugle) » | Non exécuté |
+| Attendre 1 min sans survol | Les icônes restent chez Aedot (récentes, puis incertaines) ; aucune disparition à tort | Non exécuté |
+| Aekiss cueille une plante survolée | L'icône disparaît chez Aedot tout de suite ; journal : « récoltée : … » | Non exécuté |
+| `/reload` chez Aekiss | Rappel unique « ce client bloque le balayage » ; mode survol conservé | Non exécuté |
+| Position : capture des deux minicartes, plante survolée chez Aekiss | Icône d'Aedot à moins de ~15 m du point natif | Non exécuté |
+| Après l'essai : `/pgr diag` puis `/reload` chez les deux | `lastReport` : `detection.minimapProbeApi` « restreinte par le client », `detection.auto` (mode, trouvées dont au survol) ; `PartyGatherRadarDB.probe.blindBuild` = build du client | Non exécuté |
 
 ### Scénarios complémentaires
 
