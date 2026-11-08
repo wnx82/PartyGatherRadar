@@ -215,7 +215,7 @@ local KNOWN_EVENTS = {
 	ADDON_LOADED = true, PLAYER_LOGIN = true, PLAYER_ENTERING_WORLD = true, CHAT_MSG_ADDON = true,
 	GROUP_ROSTER_UPDATE = true, GROUP_JOINED = true, GROUP_LEFT = true, MINIMAP_UPDATE_ZOOM = true,
 	ZONE_CHANGED_NEW_AREA = true, CVAR_UPDATE = true, ADDON_RESTRICTION_STATE_CHANGED = true,
-	UNIT_SPELLCAST_SENT = true,
+	UNIT_SPELLCAST_SENT = true, UNIT_SPELLCAST_SUCCEEDED = true,
 }
 
 local ALLOWED_GLOBALS = { SLASH_PARTYGATHERRADAR1 = true, PartyGatherRadarDB = true }
@@ -239,6 +239,7 @@ function World:NewClient(opts)
 	client.mapID = opts.mapID or 1429
 	client.x, client.y = opts.x or 0.5, opts.y or 0.5
 	client.inInstance = opts.inInstance or false
+	client.build = opts.build or "70374" -- numéro de build renvoyé par GetBuildInfo
 	client.cvars = { rotateMinimap = "0" }
 	client.facing = 0
 	client.savedVariables = nil
@@ -249,6 +250,12 @@ function World:NewClient(opts)
 	client.worldBlips = {}  -- ressources dans le monde : { name, mapID, x, y } (coordonnées de carte)
 	client.worldBlipRadius = 12 -- unités du cadre : zone de survol d'un point
 	client.mouseoverCalls = 0
+	-- sonde restreinte (mise à jour Forever de novembre 2026) : UpdateMouseoverAtPoint n'a plus d'effet,
+	-- l'infobulle ne nomme que les points sous le vrai curseur (cursorX, cursorY, souris sur la minicarte)
+	client.probeRestricted = false
+	client.mouseoverSecret = false -- infobulle de minicarte renvoyée comme valeur secrète
+	client.staleTooltip = nil      -- nom renvoyé pour tout point : infobulle restée figée
+	client.restrictions = {}       -- [Enum.AddOnRestrictionType] = true : restriction d'addons active
 	client.inCombat = false
 	-- types de pistage connus du personnage (C_Minimap.GetTrackingInfo)
 	client.tracking = opts.tracking or {}
@@ -429,7 +436,7 @@ local function BuildEnvironment(client)
 
 	api.GetTime = function() return world.time end
 	api.GetLocale = function() return client.locale end
-	api.GetBuildInfo = function() return "1.60.1", "70374", "Oct 12 2026", 16001, "", " " end
+	api.GetBuildInfo = function() return "1.60.1", client.build, "Oct 12 2026", 16001, "", " " end
 	api.WOW_PROJECT_ID = 18
 	api.WOW_PROJECT_CAMELOT = 18
 	api.LE_PARTY_CATEGORY_HOME = 1
@@ -460,6 +467,9 @@ local function BuildEnvironment(client)
 		},
 		AddOnRestrictionType = { Combat = 0, Encounter = 1, ChallengeMode = 2, PvPMatch = 3, Map = 4, Chat = 5 },
 		AddOnRestrictionState = { Inactive = 0, Activating = 1, Active = 2 },
+	}
+	api.C_RestrictedActions = {
+		IsAddOnRestrictionActive = function(restrictionType) return client.restrictions[restrictionType] == true end,
 	}
 
 	api.C_Timer = {
@@ -622,7 +632,20 @@ local function BuildEnvironment(client)
 	api.Minimap.IsMouseOver = function() return client.mouseOverMinimap == true end
 	api.C_TooltipInfo = {
 		GetMinimapMouseover = function()
-			local point = client.mouseover
+			if client.mouseoverSecret then
+				return H.SECRET
+			end
+			if client.staleTooltip then
+				return { lines = { { leftText = client.staleTooltip } } }
+			end
+			-- curseur logiciel actif (sonde non restreinte) : point du dernier UpdateMouseoverAtPoint ;
+			-- sinon, point sous le vrai curseur quand la souris survole la minicarte
+			local point
+			if client.softCursor and not client.probeRestricted then
+				point = client.mouseover
+			elseif client.mouseOverMinimap then
+				point = { client.cursorX - 1070, client.cursorY - 670 }
+			end
 			if not point then
 				return nil
 			end

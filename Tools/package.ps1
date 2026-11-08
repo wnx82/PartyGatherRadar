@@ -15,11 +15,11 @@
     Copie l'addon dans -AddOnsPath après l'empaquetage.
 
 .PARAMETER AddOnsPath
-    Dossier AddOns de destination (par défaut celui de la bêta WoW Forever).
+    Dossier AddOns de destination (par défaut celui du client live WoW Forever, dossier _forever_).
 #>
 param(
     [switch]$Install,
-    [string]$AddOnsPath = 'C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns'
+    [string]$AddOnsPath = 'C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns'
 )
 
 $ErrorActionPreference = 'Stop'

@@ -61,10 +61,10 @@ return function(H, root)
 		H.eq(#peersA, 1)
 		H.eq(peersA[1].name, "Aedot-Realm")
 		H.eq(peersA[1].peer.compatible, true)
-		H.eq(peersA[1].peer.addonVersion, "0.3.2")
+		H.eq(peersA[1].peer.addonVersion, "0.4.0")
 		H.eq(#peersB, 1)
 		H.eq(peersB[1].name, "Aekiss-Realm")
-		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.3.2"), "annonce de découverte")
+		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.4.0"), "annonce de découverte")
 		H.eq(peersA[1].peer.messages, #b.sent, "un message compté une seule fois")
 		H.ok(#a.sent <= 2 and #b.sent <= 2, "au plus un HELLO et une réponse par client")
 		local before = #a.sent + #b.sent
@@ -822,7 +822,7 @@ return function(H, root)
 		local _, a = Grouped()
 		local button = a.ns.MinimapButton.GetFrame()
 		button.scripts.OnEnter(button)
-		H.eq(a.tooltipLines[1], "PartyGatherRadar 0.3.2")
+		H.eq(a.tooltipLines[1], "PartyGatherRadar 0.4.0")
 		H.eq(a.tooltipLines[2], "groupe : 1 autre(s) membre(s), 1 avec PartyGatherRadar")
 		NoErrors(a)
 	end)
@@ -841,10 +841,10 @@ return function(H, root)
 		a:Slash("")
 		H.eq(a.ns.SettingsPanel.IsOpen(), true, "fenêtre ouverte")
 		local version, summary = a.ns.SettingsPanel.GetHeaderTexts()
-		H.eq(version, "version 0.3.2, protocole 1 — client 1.60.1 (build 70374)")
+		H.eq(version, "version 0.4.0, protocole 1 — client 1.60.1 (build 70374)")
 		H.eq(summary, "2 autre(s) membre(s), 1 avec PartyGatherRadar")
 		local texts = a.ns.SettingsPanel.GetMemberTexts()
-		H.ok(Contains(texts, "Aedot Wnx — |cff40ff40PartyGatherRadar 0.3.2|r"), "membre avec l'addon")
+		H.ok(Contains(texts, "Aedot Wnx — |cff40ff40PartyGatherRadar 0.4.0|r"), "membre avec l'addon")
 		H.ok(Contains(texts, "Carl Zed — |cff9d9d9dsans addon détecté|r"), "membre sans l'addon")
 		world:SetGroup({ a })
 		world:Advance(1)
@@ -1202,5 +1202,343 @@ return function(H, root)
 		H.ok(report:find("detection.auto : INFO — active", 1, true), "sonde detection.auto")
 		H.ok(report:find("1 ressource(s) suivie(s)", 1, true), "ressources suivies")
 		NoErrors(a)
+	end)
+
+	---------------------------------------------------------------------------
+	H.suite("Adaptation au client : sonde restreinte (mise à jour Forever de novembre 2026)")
+	---------------------------------------------------------------------------
+	-- Depuis cette mise à jour, la sonde ne nomme un point que sous le vrai curseur : le balayage par
+	-- curseur logiciel ne lit plus rien, sans erreur (client.probeRestricted). Le survol reste possible.
+
+	local UNITS_PER_YARD = 70 / 233.333
+
+	--- Place le vrai curseur sur le point de minicarte d'une ressource du monde.
+	local function HoverOver(client, blip)
+		client.cursorX = 1070 + (blip.x - client.x) * MAP.width * UNITS_PER_YARD
+		client.cursorY = 670 + (client.y - blip.y) * MAP.height * UNITS_PER_YARD
+		client.mouseOverMinimap = true
+	end
+
+	--- Survole la ressource un instant, puis laisse un balayage passer souris hors de la minicarte.
+	local function HoverThenLeave(world, client, blip)
+		HoverOver(client, blip)
+		world:Advance(0.5)
+		client.mouseOverMinimap = false
+		world:Advance(3)
+	end
+
+	local function CountChat(client, text)
+		local count = 0
+		for _, line in ipairs(client.chat) do
+			if line:find(text, 1, true) then
+				count = count + 1
+			end
+		end
+		return count
+	end
+
+	local BLIND_TEXT = "Détection au survol activée"
+
+	--- Client restreint, deux herbes survolées : le balayage est déclaré aveugle.
+	local function BlindPair()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		local h1, h2 = Herb("Pacifique", 40, 30), Herb("Feuillargent", -50, 20)
+		a.worldBlips = { h1, h2 }
+		world:Advance(3)
+		HoverThenLeave(world, a, h1)
+		HoverThenLeave(world, a, h2)
+		return world, a, b, h1, h2
+	end
+
+	H.test("sonde restreinte : le balayage ne voit rien, une herbe survolée est partagée au bon endroit", function()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		local herb = Herb("Pacifique", 40, 30)
+		a.worldBlips = { herb }
+		world:Advance(5)
+		H.eq(#Received(b, "Pacifique"), 0, "balayage aveugle : rien de partagé")
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 0)
+		HoverOver(a, herb)
+		world:Advance(0.5)
+		local list = Received(b, "Pacifique")
+		H.eq(#list, 1, "partagée au survol")
+		H.eq(list[1] and list[1].status, "ACTIVE")
+		local marker = list[1].marker
+		local distance = b.ns.MarkerManager.DistanceYards(ELWYNN, marker.x, marker.y, herb.x, herb.y)
+		H.ok(distance <= 15, string.format("position à %.1f m de la plante", distance))
+		H.eq(CountSent(a, "N"), 1, "une seule annonce malgré les lectures répétées")
+		H.eq(a.ns.AutoDetect.stats.hovered, 1)
+		H.ok(LogContains(a, "herbe : Pacifique") and LogContains(a, "(survol)"), "découverte au survol journalisée")
+		H.eq(#VisiblePins(a), 0, "aucun doublon sur la minicarte d'Aekiss")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("deux herbes survolées absentes du balayage : mode survol, un avertissement, marqueurs gardés", function()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		local h1, h2 = Herb("Pacifique", 40, 30), Herb("Feuillargent", -50, 20)
+		a.worldBlips = { h1, h2 }
+		world:Advance(3)
+		HoverThenLeave(world, a, h1)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), false, "une seule preuve : pas encore aveugle")
+		H.eq(#Received(b, "Pacifique"), 1, "herbe survolée gardée malgré le balayage vide")
+		HoverThenLeave(world, a, h2)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), true, "balayage déclaré aveugle")
+		H.eq(CountChat(a, BLIND_TEXT), 1, "avertissement affiché")
+		H.ok(LogContains(a, "balayage aveugle"), "journalisé")
+		-- balayage espacé : au plus un essai en 20 s
+		local perPass = #a.ns.Tracking.BuildGrid(70, 70, 10)
+		local before = a.mouseoverCalls
+		world:Advance(20)
+		H.ok(a.mouseoverCalls - before <= perPass, "au plus un balayage en 20 s : " .. (a.mouseoverCalls - before))
+		H.eq(CountSent(a, "X"), 0, "aucune herbe déclarée disparue à tort")
+		H.eq(#Received(b, "Pacifique"), 1)
+		H.eq(#Received(b, "Feuillargent"), 1)
+		H.eq(CountChat(a, BLIND_TEXT), 1, "avertissement unique")
+		-- capacités et rapports
+		local caps = a.ns.GroupSync.DecodeCaps(a.ns.GroupSync.GetLocalCaps())
+		H.eq(caps.MINIMAP_PROBE, false, "sondage plus annoncé")
+		local seen = b.ns.GroupSync.DecodeCaps(b.ns.GroupSync.GetPeers()[1].peer.caps)
+		H.eq(seen.MINIMAP_PROBE, false, "nouvelle annonce : le groupe sait que le sondage manque")
+		a:Slash("status")
+		H.ok(a:ChatContains("mode survol %(balayage aveugle%)"), "statut")
+		a:Slash("diag")
+		local report = table.concat(a.ns.db.diagnostics.lastReport, "\n")
+		H.ok(report:find("restreinte par le client", 1, true), "sonde detection.minimapProbeApi")
+		H.ok(report:find("capacité localDetection : PARTIEL — au survol seulement", 1, true), "capacité")
+		a:Slash("probe scan")
+		world:Advance(1)
+		H.ok(a:ChatContains("ne nomme plus un point"), "balayage manuel expliqué")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("sonde de nouveau libre : retour au balayage automatique, sans doublon", function()
+		local world, a, b = BlindPair()
+		a.probeRestricted = false
+		world:Advance(35)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), false, "balayage rétabli")
+		H.eq(CountChat(a, "fonctionne de nouveau"), 1, "message de retour")
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 2, "les herbes survolées sont reprises, pas dupliquées")
+		H.eq(#Received(b, "Pacifique"), 1)
+		local caps = a.ns.GroupSync.DecodeCaps(a.ns.GroupSync.GetLocalCaps())
+		H.eq(caps.MINIMAP_PROBE, true, "sondage de nouveau annoncé")
+		-- de nouveau toutes les 2 s : une herbe cueillie par un autre disparaît
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(6)
+		H.eq(#Received(b, "Feuillargent"), 0, "absence de nouveau détectée par le balayage")
+		local seen = b.ns.GroupSync.DecodeCaps(b.ns.GroupSync.GetPeers()[1].peer.caps)
+		H.eq(seen.MINIMAP_PROBE, true, "nouvelle annonce : le groupe sait que le sondage est revenu")
+		NoErrors(a)
+	end)
+
+	H.test("client non restreint : survoler une herbe que le balayage voit ne change rien", function()
+		local world, a, b = Grouped()
+		local h1, h2 = Herb("Pacifique", 40, 30), Herb("Feuillargent", -50, 20)
+		a.worldBlips = { h1, h2 }
+		world:Advance(3)
+		HoverThenLeave(world, a, h1)
+		HoverThenLeave(world, a, h2)
+		HoverThenLeave(world, a, h1)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), false)
+		H.eq(CountChat(a, BLIND_TEXT), 0)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 2, "survol et balayage suivent la même herbe")
+		H.eq(#Received(b, "Pacifique"), 1)
+		NoErrors(a)
+	end)
+
+	H.test("mode survol mémorisé pour ce build du client, réévalué sur un nouveau build", function()
+		local world, a = BlindPair()
+		H.eq(a.env.PartyGatherRadarDB.probe.blindBuild, "70374", "build mémorisé")
+		a:Reload()
+		world:Advance(3)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), true, "aveugle dès le chargement")
+		H.eq(CountChat(a, "rappel : ce client bloque"), 1, "rappel une fois par session")
+		world:Advance(10)
+		H.eq(CountChat(a, "rappel : ce client bloque"), 1, "pas de répétition")
+		a.build = "70999"
+		a:Reload()
+		world:Advance(3)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), false, "nouveau build : balayage réévalué")
+		H.eq(a.env.PartyGatherRadarDB.probe.blindBuild, nil)
+		NoErrors(a)
+	end)
+
+	H.test("herbe récoltée : retirée tout de suite chez les autres ; filon, cast raté : gardés", function()
+		local oreTracking = { name = "Découverte de gisements", active = true, spellID = 2580, type = "spell" }
+		local world, a, b = Grouped({ name = "Aekiss", tracking = { H.HERB_TRACKING, oreTracking } })
+		a.probeRestricted = true
+		local herb, vein = Herb("Pacifique", 10, 5), Herb("Filon de cuivre", -40, -20)
+		a.worldBlips = { herb, vein }
+		HoverThenLeave(world, a, herb)
+		HoverThenLeave(world, a, vein)
+		H.eq(#Received(b, "Pacifique"), 1)
+		H.eq(#Received(b, "Filon de cuivre"), 1)
+		-- cast interrompu : rien n'est retiré
+		a:FireEvent("UNIT_SPELLCAST_SENT", "player", "Pacifique", "Cast-1", 2366)
+		world:Advance(0.1)
+		H.eq(#Received(b, "Pacifique"), 1, "cast sans réussite : herbe gardée")
+		-- réussite d'un autre sort : rien n'est retiré
+		a:FireEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-2", 133)
+		world:Advance(0.1)
+		H.eq(#Received(b, "Pacifique"), 1)
+		-- cueillette réussie
+		a:FireEvent("UNIT_SPELLCAST_SENT", "player", "Pacifique", "Cast-3", 2366)
+		a:FireEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3", 2366)
+		world:Advance(0.1)
+		H.eq(#Received(b, "Pacifique"), 0, "herbe retirée")
+		H.eq(CountSent(a, "X"), 1, "un REMOVE envoyé")
+		H.ok(LogContains(a, "récoltée : Pacifique"), "récolte journalisée")
+		-- filon miné : il peut rester, il n'est pas retiré
+		a:FireEvent("UNIT_SPELLCAST_SENT", "player", "Filon de cuivre", "Cast-4", 2575)
+		a:FireEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-4", 2575)
+		world:Advance(0.1)
+		H.eq(#Received(b, "Filon de cuivre"), 1, "filon gardé")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("herbe récoltée loin du joueur : rien n'est retiré", function()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		local herb = Herb("Pacifique", 60, 0)
+		a.worldBlips = { herb }
+		HoverThenLeave(world, a, herb)
+		a:FireEvent("UNIT_SPELLCAST_SENT", "player", "Pacifique", "Cast-1", 2366)
+		a:FireEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", 2366)
+		world:Advance(0.1)
+		H.eq(#Received(b, "Pacifique"), 1, "une autre plante du même nom, à 60 m, reste")
+		H.eq(CountSent(a, "X"), 0)
+	end)
+
+	H.test("échecs de sonde répétés (valeur secrète) : un seul avertissement, jamais silencieux", function()
+		local world, a = Grouped()
+		a.mouseoverSecret = true
+		a.worldBlips = { Herb("Pacifique", 40, 30) }
+		world:Advance(30)
+		H.eq(CountChat(a, "balayages d'affilée en échec"), 1, "avertissement unique")
+		H.ok(a.ns.AutoDetect.stats.aborted >= 5)
+		a:Slash("status")
+		H.ok(a:ChatContains("dernier : secret"), "raison visible dans /pgr status")
+		NoErrors(a)
+	end)
+
+	H.test("restriction d'addons (rencontre) : ni balayage, ni survol, ni alerte ; reprise ensuite", function()
+		local world, a, b = Grouped()
+		local herb = Herb("Pacifique", 40, 30)
+		a.worldBlips = { herb }
+		a.restrictions[a.env.Enum.AddOnRestrictionType.Encounter] = true
+		local before = a.mouseoverCalls
+		world:Advance(5)
+		H.eq(a.mouseoverCalls, before, "aucun balayage")
+		HoverOver(a, herb)
+		world:Advance(0.5)
+		a.mouseOverMinimap = false
+		H.eq(#Received(b, "Pacifique"), 0, "aucune lecture au survol")
+		H.eq(CountChat(a, "en échec"), 0, "aucune alerte")
+		a.restrictions = {}
+		world:Advance(5)
+		H.eq(#Received(b, "Pacifique"), 1, "reprise après la restriction")
+		NoErrors(a)
+	end)
+
+	H.test("fonctions de sondage retirées du client : avertissement unique, survol toujours actif", function()
+		local world, a, b = Grouped()
+		a.env.__api.Minimap.UpdateMouseoverAtPoint = nil
+		local herb = Herb("Pacifique", 40, 30)
+		a.worldBlips = { herb }
+		world:Advance(10)
+		H.eq(CountChat(a, "fonctions de sondage de la minicarte absentes"), 1, "avertissement unique")
+		HoverOver(a, herb)
+		world:Advance(0.5)
+		H.eq(#Received(b, "Pacifique"), 1, "partagée au survol")
+		NoErrors(a)
+	end)
+
+	-- revue de code de la 0.4.0 : preuves datées, une par ressource, effacées par une vraie lecture
+
+	H.test("preuve de plus de 10 min oubliée : une herbe survolée plus tard ne rend pas aveugle", function()
+		local world, a = Grouped()
+		a.probeRestricted = true
+		local h1, h2 = Herb("Pacifique", 40, 30), Herb("Feuillargent", -50, 20)
+		a.worldBlips = { h1, h2 }
+		world:Advance(3)
+		HoverThenLeave(world, a, h1)
+		world:Advance(610)
+		HoverThenLeave(world, a, h2)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), false, "la première preuve a expiré")
+		H.eq(CountChat(a, BLIND_TEXT), 0)
+		NoErrors(a)
+	end)
+
+	H.test("même herbe survolée deux fois à 5 min d'écart : une seule preuve", function()
+		local world, a = Grouped()
+		a.probeRestricted = true
+		local herb = Herb("Pacifique", 40, 30)
+		a.worldBlips = { herb }
+		world:Advance(3)
+		HoverThenLeave(world, a, herb)
+		world:Advance(320)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 0, "repère expiré entre les deux survols")
+		HoverThenLeave(world, a, herb)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), false, "même plante, même endroit : pas deux preuves")
+		NoErrors(a)
+	end)
+
+	H.test("balayage qui lit une ressource : preuves effacées (herbes cueillies par d'autres après le survol)", function()
+		local world, a = Grouped()
+		local h1, h2, h3 = Herb("Pacifique", 40, 30), Herb("Feuillargent", -50, 20), Herb("Terrestrine", 30, -35)
+		-- h1 survolée, cueillie par un autre avant le balayage suivant : absence dans un balayage vide
+		a.worldBlips = { h1 }
+		HoverOver(a, h1)
+		world:Advance(0.5)
+		a.worldBlips = {}
+		a.mouseOverMinimap = false
+		world:Advance(3)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), false, "une seule preuve")
+		-- le balayage lit h2 : la sonde fonctionne
+		a.worldBlips = { h2 }
+		world:Advance(3)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 2)
+		-- même cas avec h3, h2 cueillie entre-temps
+		a.worldBlips = { h3 }
+		HoverOver(a, h3)
+		world:Advance(0.5)
+		a.worldBlips = {}
+		a.mouseOverMinimap = false
+		world:Advance(3)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), false, "la première preuve a été effacée par la lecture de h2")
+		H.eq(CountChat(a, BLIND_TEXT), 0)
+		NoErrors(a)
+	end)
+
+	H.test("infobulle figée pendant un essai de balayage aveugle : le mode survol reste", function()
+		local world, a = BlindPair()
+		a.staleTooltip = "Pacifique"
+		world:Advance(35)
+		H.eq(a.ns.AutoDetect.IsProbeBlind(), true, "même nom sur tous les points : pas une vraie lecture")
+		H.eq(CountChat(a, "fonctionne de nouveau"), 0)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 2, "aucun repère fantôme")
+		NoErrors(a)
+	end)
+
+	H.test("en combat : aucune lecture au survol, reprise ensuite", function()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		local herb = Herb("Pacifique", 40, 30)
+		a.worldBlips = { herb }
+		world:Advance(3)
+		a.inCombat = true
+		HoverOver(a, herb)
+		world:Advance(1)
+		H.eq(#Received(b, "Pacifique"), 0, "rien lu en combat")
+		a.inCombat = false
+		world:Advance(0.5)
+		H.eq(#Received(b, "Pacifique"), 1, "lue après le combat")
+		NoErrors(a)
+		NoErrors(b)
 	end)
 end

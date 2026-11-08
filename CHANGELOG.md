@@ -4,6 +4,47 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 [SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` et
 `PartyGatherRadar_Forever.toc` (`## Version`, fichiers identiques) et `Core/Init.lua` (`ns.VERSION`).
 
+## [0.4.0] - 2026-11-08
+
+### Contexte
+
+Une mise à jour du client WoW Forever de novembre 2026 restreint la sonde de minicarte : elle ne nomme plus
+un point que sous le vrai curseur (constat publié par NaowhForever_Professions 1.2.17). Le balayage de la
+0.3.2 ne lisait donc plus rien, sans erreur ni message : la détection s'arrêtait en silence.
+
+### Ajouté
+
+- Détection au survol : quand le joueur passe la souris sur un point de sa minicarte, l'infobulle native
+  sous le vrai curseur est lue toutes les 0,2 s. Une herbe ou un minerai reconnu est placé sous le curseur,
+  suivi et partagé avec le groupe comme une détection du balayage.
+- Adaptation automatique au client : une ressource vue au survol, absente du balayage suivant alors que ce
+  balayage n'a lu aucune ressource, compte comme une preuve (une par ressource physique, valable 10 min,
+  effacées dès qu'un balayage lit une ressource). Après deux preuves, le balayage est déclaré aveugle :
+  avertissement unique dans la discussion, mode survol, un essai de balayage toutes les 30 s, capacité
+  « sondage minicarte » plus annoncée (nouveau HELLO au groupe à chaque changement de mode). Un essai qui
+  relit une ressource sur au plus la moitié de ses points rétablit la détection automatique ; une
+  infobulle restée figée sur tous les points ne compte pas. Le mode est mémorisé pour le build du client
+  (`PartyGatherRadarDB.probe`) et réévalué à chaque nouveau build.
+- Herbe cueillie par le joueur (`UNIT_SPELLCAST_SUCCEEDED` du sort de cueillette) : retirée tout de suite,
+  chez lui et dans le groupe. Un filon miné n'est pas retiré, car il peut souvent être miné plusieurs fois.
+- Avertissement unique après 5 balayages d'affilée interrompus par la sonde (erreur, valeur secrète), ou
+  si les fonctions de sondage disparaissent du client. Avant, ces échecs restaient silencieux.
+- Aucun balayage ni lecture au survol en combat ou pendant une restriction d'addons
+  (`C_RestrictedActions.IsAddOnRestrictionActive` : combat, rencontre, mode défi, JcJ, carte).
+- `/pgr status`, `/pgr diag` : mode de détection, ressources trouvées au survol, herbes cueillies, sonde
+  « restreinte par le client » ; `/pgr probe scan` explique un balayage vide sur un client restreint.
+- 15 tests hors jeu (139 au total) : client restreint, preuves et passage en mode survol, retour au
+  balayage, mémoire par build, cueillette, échecs répétés, restrictions d'addons, fonctions de sondage
+  absentes, preuves expirées, dédoublonnées ou effacées, infobulle figée, survol en combat.
+
+### Modifié
+
+- Une ressource vue seulement au survol n'est plus déclarée disparue par un balayage qui n'a lu aucune
+  ressource : elle expire normalement (récente 60 s, puis incertaine 240 s).
+- Balayage : un nom reconnu dont le type n'est pas pisté (filon sans Découverte de gisements) n'est plus
+  compté comme une ressource lue.
+- Documentation : client live (build 1.60.1.70862), restriction de novembre, scénario en jeu 11.
+
 ## [0.3.2] - 2026-11-04
 
 ### Ajouté

@@ -1,14 +1,20 @@
 # PartyGatherRadar
 
-Addon pour **World of Warcraft: Forever** (bêta 1.60.1, interface 16001) : partager en temps réel,
+Addon pour **World of Warcraft: Forever** (1.60.1, interface 16001) : partager en temps réel,
 entre membres d'un groupe, les ressources de récolte (herbes, minerais) détectées sur la minicarte.
 
-> **État : prototype 0.3.2.** Détection automatique des herbes et minerais de la minicarte et partage
-> au groupe (phases 2 et 3, expérimental), bouton de minicarte et fenêtre de réglages. Le tout est testé
-> hors jeu (simulation de plusieurs clients). **Vérifié en jeu** (2026-10-15, deux clients) : chargement, sondes
-> d'API, identité, communication de groupe, lecture des plantes par le balayage. **Pas encore vérifié** :
-> détection automatique et partage des plantes, bouton et fenêtre de réglages. Voir
-> [Tests/TestPlan.md](Tests/TestPlan.md).
+> **État : prototype 0.4.0.** Détection des herbes et minerais de la minicarte et partage au groupe
+> (phases 2 et 3, expérimental), bouton de minicarte et fenêtre de réglages. Le tout est testé hors jeu
+> (simulation de plusieurs clients). **Vérifié en jeu** (2026-10-15, deux clients) : chargement, sondes
+> d'API, identité, communication de groupe, lecture des plantes par le balayage ; le journal du client
+> live montre ensuite des plantes détectées par Aekiss et reçues par Aedot.
+>
+> **Novembre 2026** : une mise à jour de WoW Forever empêche désormais les addons de lire la minicarte à
+> distance (la sonde ne nomme plus un point que sous le vrai curseur). La 0.4.0 s'adapte seule : elle
+> repère le balayage aveugle, prévient une fois dans la discussion et passe en **détection au survol** :
+> passer la souris sur une plante de sa minicarte la partage au groupe. Si Blizzard rouvre la sonde, la
+> détection automatique revient seule. **Pas encore vérifié en jeu** : détection au survol, passage
+> automatique d'un mode à l'autre, bouton et fenêtre de réglages. Voir [Tests/TestPlan.md](Tests/TestPlan.md).
 
 ## Objectif
 
@@ -21,7 +27,8 @@ propre minicarte. Le partage fonctionne dans les deux sens et prévoit les miner
 | Capacité | Verdict |
 |---|---|
 | Lister les points de pistage de la minicarte | **Impossible** : aucune API |
-| Lire le nom d'un point (survol, ou sondage officiel propre à Forever) | **Vérifié en jeu** (balayage, 2026-10-15), expérimental : les noms lus doivent être triés (quêtes, joueurs) |
+| Lire le nom d'un point sous le vrai curseur (survol) | Possible (détection au survol, 0.4.0, non vérifiée en jeu) ; les noms lus doivent être triés (quêtes, joueurs) |
+| Sonder la minicarte à distance (sondage officiel propre à Forever) | **Vérifié en jeu** (balayage, 2026-10-15) ; **bloqué** depuis une mise à jour de novembre 2026 |
 | Communiquer entre membres du groupe (messages d'addon) | **Vérifié en jeu** entre deux clients (0.1.1) |
 | Afficher des icônes personnalisées sur la minicarte | Possible, non vérifié en jeu |
 
@@ -32,7 +39,7 @@ externe, aucune automatisation de déplacement, d'interaction ou de récolte, au
 artificiellement chez un joueur qui ne le possède pas. Aucune position n'est inventée : sans donnée
 fiable, rien n'est affiché.
 
-## Fonctionnalités de la version 0.3.2
+## Fonctionnalités de la version 0.4.0
 
 Réellement implémenté :
 
@@ -54,6 +61,11 @@ Réellement implémenté :
   les 2 s ; seuls les noms d'herbes et de minerais connus sont gardés (les zones de quête et les joueurs
   sont ignorés) ; une plante découverte est envoyée au groupe, rafraîchie toutes les 25 s tant qu'elle
   reste visible, puis retirée chez tous quand elle disparaît (récoltée) ; noms appris à la récolte ;
+- **détection au survol** : une plante ou un filon survolé à la souris sur sa minicarte est partagé,
+  même quand le client bloque le balayage ; une herbe cueillie est retirée chez tous tout de suite ;
+- **adaptation au client** : balayage aveugle repéré seul (avertissement unique, mode survol, essai toutes
+  les 30 s, retour automatique), mémorisé par build du client ; échecs répétés de la sonde signalés ;
+  aucun sondage pendant les restrictions d'addons (rencontre, mode défi, JcJ) ;
 - sondes de détection : lecture de l'infobulle de minicarte au survol, balayage manuel ;
 - test contrôlé `/pgr test` (données marquées TEST, jamais mélangées aux détections réelles) ;
 - isolation des erreurs : un module défaillant est désactivé sans arrêter les autres ;
@@ -61,14 +73,15 @@ Réellement implémenté :
   groupe qui utilisent l'addon, affichage des infos des autres joueurs, partage, herbes, minerais ;
 - français (référence) et anglais.
 
-Prévu (non implémenté) : mode de secours (positions de récolte, marqueurs manuels partagés), carte du monde (phase 3),
+Prévu (non implémenté) : reste du mode de secours (positions de récolte, marqueurs manuels partagés), carte du monde (phase 3),
 réglages avancés (taille, couleurs, durées) dans la fenêtre (phase 4).
 
 ## Installation
 
-Chemin cible : `World of Warcraft\_classic_beta_\Interface\AddOns\PartyGatherRadar\`
+Chemin cible : `World of Warcraft\_forever_\Interface\AddOns\PartyGatherRadar\` (client live ; la bêta
+utilisait `_classic_beta_`)
 
-**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.3.2.zip` dans le dossier `AddOns` ; le ZIP
+**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.4.0.zip` dans le dossier `AddOns` ; le ZIP
 contient déjà le dossier `PartyGatherRadar\`. Vérifier que le chemin final est
 `AddOns\PartyGatherRadar\PartyGatherRadar.toc` (et non `AddOns\PartyGatherRadar\PartyGatherRadar\…`).
 
@@ -76,7 +89,7 @@ contient déjà le dossier `PartyGatherRadar\`. Vérifier que le chemin final es
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File Tools\package.ps1 -Install
-# autre dossier :  -AddOnsPath "D:\Jeux\World of Warcraft\_classic_beta_\Interface\AddOns"
+# autre dossier (ex. bêta) :  -AddOnsPath "C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns"
 ```
 
 Puis, en jeu : écran de sélection des personnages → AddOns → cocher PartyGatherRadar (et
@@ -104,11 +117,14 @@ n'est nécessaire.
 ## Premier essai à deux
 
 1. Installer l'addon chez les deux joueurs, se grouper.
-2. Chacun voit « <autre> utilise PartyGatherRadar 0.3.2 ». Sinon : `/pgr status` et `/pgr diag`.
+2. Chacun voit « <autre> utilise PartyGatherRadar 0.4.0 ». Sinon : `/pgr status` et `/pgr diag`.
 3. Aekiss active Découverte d'herbes et s'approche de plantes : en quelques secondes, Aedot voit une
    icône verte à l'emplacement de chaque plante sur sa propre minicarte (survol : le nom de la plante
    en titre, « Détecté par : Aekiss »). Rien à taper : la détection est automatique.
-4. Aekiss récolte une plante : son icône disparaît chez Aedot après deux balayages (environ 4 s).
+   Sur un client qui bloque le balayage (live depuis novembre 2026) : Aekiss passe la souris sur chaque
+   plante de sa minicarte ; après deux plantes, l'addon annonce « Détection au survol activée ».
+4. Aekiss cueille une plante : son icône disparaît chez Aedot tout de suite (sinon après deux balayages,
+   environ 4 s, quand le balayage fonctionne).
 5. Contrôle de la superposition chez Aekiss : case « Afficher aussi mes propres détections »
    (fenêtre `/pgr`), les icônes doivent recouvrir les points natifs.
 

@@ -13,8 +13,27 @@
 -- de 2 balayages alors qu'elle devrait être visible (pistage actif, bien à l'intérieur du rayon de la
 -- minicarte) : elle est considérée récoltée ou disparue, retirée et signalée au groupe (REMOVE).
 --
--- Jamais pendant un combat, jamais quand la souris survole la minicarte (infobulle native du joueur), jamais
--- sans pistage actif : aucun pistage n'est activé par l'addon.
+-- Jamais pendant un combat ou une restriction d'addons (rencontre, mode défi, JcJ, carte restreinte), jamais
+-- quand la souris survole la minicarte (infobulle native du joueur), jamais sans pistage actif : aucun
+-- pistage n'est activé par l'addon.
+--
+-- Survol : quand le joueur passe lui-même la souris sur un point de la minicarte, l'infobulle native sous le
+-- VRAI curseur est lue toutes les 0,2 s ; une herbe ou un minerai reconnu est suivi et partagé comme par le
+-- balayage. Cette lecture marche sans le curseur logiciel.
+--
+-- Adaptation au client : une mise à jour de WoW Forever de novembre 2026 a restreint la sonde. Elle ne nomme
+-- plus un point que sous le vrai curseur (constat publié par NaowhForever_Professions 1.2.17), donc le
+-- balayage ne renvoie plus rien, sans erreur. Signe retenu : une ressource vue au survol est absente du
+-- balayage suivant, et ce balayage n'a lu aucune ressource (les autres noms, comme les zones de quête, ne
+-- comptent pas). Une preuve par ressource physique, valable 10 min ; un balayage qui lit une ressource les
+-- efface toutes. Après 2 preuves, le balayage est déclaré aveugle. Effets : avertissement unique, détection
+-- au survol seule, un essai de balayage toutes les 30 s, et retour automatique dès qu'un essai relit une
+-- ressource sur au plus la moitié de ses points (sinon : infobulle figée). L'état est mémorisé pour le
+-- build du client (PartyGatherRadarDB.probe) et réévalué à chaque nouveau build. Une ressource vue
+-- seulement au survol n'est jamais déclarée disparue par un balayage qui n'a lu aucune ressource.
+--
+-- Récolte : une herbe récoltée par le joueur (sort réussi) est retirée tout de suite, chez lui et dans le
+-- groupe. Un filon n'est pas retiré, car il peut souvent être miné plusieurs fois.
 
 local addonName, ns = ...
 
@@ -38,6 +57,19 @@ AutoDetect.MISS_LIMIT = 2          -- balayages consécutifs sans la ressource a
 AutoDetect.INSIDE_FACTOR = 0.75    -- part du rayon de la minicarte où une absence est fiable
 AutoDetect.MAX_NODES = 150         -- même borne que MarkerManager.MAX_REAL_PER_SENDER
 AutoDetect.UNKNOWN_LOG_LIMIT = 30  -- noms inconnus journalisés (une fois chacun)
+AutoDetect.HOVER_INTERVAL = 0.2    -- secondes entre deux lectures de l'infobulle sous le vrai curseur
+AutoDetect.BLIND_EVIDENCE = 2      -- ressources survolées absentes d'un balayage vide : balayage aveugle
+AutoDetect.BLIND_RETRY_INTERVAL = 30 -- balayage aveugle : un essai toutes les 30 s pour repérer son retour
+AutoDetect.FAILURE_WARN_LIMIT = 5  -- balayages d'affilée interrompus par une erreur de sonde : alerte
+AutoDetect.GATHER_RADIUS = 20      -- mètres : herbe du même nom retirée autour du joueur après la récolte
+AutoDetect.EVIDENCE_WINDOW = 600   -- secondes : une preuve de balayage aveugle plus ancienne ne compte plus
+AutoDetect.EVIDENCE_DELAY = 10     -- secondes : un survol plus ancien n'est plus comparé au balayage suivant
+AutoDetect.EVIDENCE_SAME_YARDS = 50 -- deux preuves du même nom à moins de 50 m : une seule ressource
+AutoDetect.RESTORE_MAX_SHARE = 0.5 -- retour au balayage : ressource lue sur au plus la moitié des points
+
+-- Restrictions d'addons (API de Midnight, présentes sur Forever) pendant lesquelles les valeurs lues
+-- deviennent secrètes ; le combat est déjà couvert par InCombatLockdown
+local RESTRICTIONS = { "Combat", "Encounter", "ChallengeMode", "PvPMatch", "Map" }
 
 -- Sorts de récolte : le nom ciblé est une ressource (apprentissage des noms)
 local GATHER_SPELLS = {
@@ -55,8 +87,20 @@ local sessionTag
 local forceResend = false
 local unknownNames = {}
 local unknownCount = 0
+local blind = false          -- balayage aveugle (client restreint) : détection au survol seule
+-- preuves de balayage aveugle : ressources survolées absentes d'un balayage sans aucune ressource,
+-- { name, mapID, x, y, at } ; une par ressource physique (nom et position), pas par identifiant
+local blindEvidence = {}
+local blindNoticeShown = false
+local restoredNoticeShown = false
+local probeStorage           -- PartyGatherRadarDB.probe : { blindBuild = build du client }
+local lastPassStartedAt
+local lastSoftCursorAt       -- dernier usage du curseur logiciel : l'infobulle peut encore refléter son point
+local consecutiveFailures = 0
+local failureWarned = false
+local lastGather             -- dernier sort de récolte envoyé : { castGUID, kind, name }
 
-AutoDetect.stats = { passes = 0, aborted = 0, lastAbort = nil, found = 0, gone = 0 }
+AutoDetect.stats = { passes = 0, aborted = 0, lastAbort = nil, found = 0, gone = 0, hovered = 0, gathered = 0 }
 
 ---------------------------------------------------------------------------
 -- Conditions
@@ -76,6 +120,25 @@ local function ActiveKinds()
 	return { HERB = herbs and true or false, ORE = ores and true or false }
 end
 
+--- Vrai si une restriction d'addons est active (valeur secrète ou API absente : pas de restriction connue).
+function AutoDetect.IsAddOnRestricted()
+	local isActive = C_RestrictedActions and C_RestrictedActions.IsAddOnRestrictionActive
+	local types = Enum and Enum.AddOnRestrictionType
+	if not (isActive and types) then
+		return false
+	end
+	for _, name in ipairs(RESTRICTIONS) do
+		local restrictionType = types[name]
+		if restrictionType ~= nil then
+			local ok, active = pcall(isActive, restrictionType)
+			if ok and not ns.IsSecret(active) and active == true then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 --- Vrai si un balayage peut avoir lieu maintenant ; sinon false, raison.
 function AutoDetect.CanScan()
 	if not ns.Config.Get("enabled") or not ns.Config.Get("autoDetect") then
@@ -89,6 +152,9 @@ function AutoDetect.CanScan()
 	end
 	if InCombatLockdown and InCombatLockdown() then
 		return false, "combat"
+	end
+	if AutoDetect.IsAddOnRestricted() then
+		return false, "restricted"
 	end
 	if not Minimap:IsVisible() then
 		return false, "hidden"
@@ -204,7 +270,7 @@ local function OldestNode()
 	return oldest
 end
 
-local function CreateNode(cluster, mapID, now)
+local function CreateNode(cluster, mapID, now, byHover)
 	if nodeCount >= AutoDetect.MAX_NODES then
 		local oldest = OldestNode()
 		if oldest then
@@ -218,9 +284,17 @@ local function CreateNode(cluster, mapID, now)
 	nodes[node.id] = node
 	nodeCount = nodeCount + 1
 	AutoDetect.stats.found = AutoDetect.stats.found + 1
-	ns.Diagnostics.Log("DETECT", "%s : %s, carte %d (%.2f, %.2f) ±%.0f m", node.kind == "HERB" and "herbe" or "minerai",
-		node.name, mapID, node.x * 100, node.y * 100, node.accuracy)
+	if byHover then
+		AutoDetect.stats.hovered = AutoDetect.stats.hovered + 1
+	end
+	ns.Diagnostics.Log("DETECT", "%s : %s, carte %d (%.2f, %.2f) ±%.0f m%s", node.kind == "HERB" and "herbe" or "minerai",
+		node.name, mapID, node.x * 100, node.y * 100, node.accuracy, byHover and " (survol)" or "")
 	return node
+end
+
+--- Vrai si la ressource n'a été vue qu'au survol depuis le dernier balayage qui l'a trouvée.
+local function IsHoverOnly(node)
+	return node.hoverAt ~= nil and (node.scanAt == nil or node.scanAt < node.hoverAt)
 end
 
 local function UpdateNode(node, cluster, now)
@@ -256,24 +330,30 @@ local function Publish(node, sender, now, width, height)
 	end
 end
 
-local function Gone(node, sender)
+local function Gone(node, sender, label)
 	ns.MarkerManager.Remove(sender, node.id, false)
 	if node.sentOnce then
 		ns.Sender.SendRemove(node.id, "GATHERED")
 	end
 	RemoveNode(node)
 	AutoDetect.stats.gone = AutoDetect.stats.gone + 1
-	ns.Diagnostics.Log("DETECT", "disparu : %s, carte %d (%.2f, %.2f)", node.name, node.mapID, node.x * 100,
-		node.y * 100)
+	ns.Diagnostics.Log("DETECT", "%s : %s, carte %d (%.2f, %.2f)", label or "disparu", node.name, node.mapID,
+		node.x * 100, node.y * 100)
 end
 
---- Ressources absentes de ce balayage alors qu'elles auraient dû y figurer.
+--- Vrai si la ressource se trouve dans la zone où son absence d'un balayage est fiable.
+local function IsInsideReliableZone(node, context)
+	return node.mapID == context.mapID and Yards(context.mapWidth, context.mapHeight, context.playerX,
+		context.playerY, node.x, node.y) <= context.radius * AutoDetect.INSIDE_FACTOR
+end
+
+--- Ressources absentes de ce balayage alors qu'elles auraient dû y figurer. Un balayage qui n'a lu aucune
+--- ressource ne retire pas une ressource vue seulement au survol : sur un client restreint, il ne voit plus rien.
 local function CheckMisses(current, context, matched, sender)
-	local limit = context.radius * AutoDetect.INSIDE_FACTOR
 	local missing = {}
 	for id, node in pairs(nodes) do
-		if not matched[id] and node.mapID == context.mapID and current.kinds[node.kind]
-			and Yards(context.mapWidth, context.mapHeight, context.playerX, context.playerY, node.x, node.y) <= limit then
+		if not matched[id] and current.kinds[node.kind] and IsInsideReliableZone(node, context)
+			and not (#current.hits == 0 and IsHoverOnly(node)) then
 			node.misses = node.misses + 1
 			if node.misses >= AutoDetect.MISS_LIMIT then
 				missing[#missing + 1] = node
@@ -284,6 +364,79 @@ local function CheckMisses(current, context, matched, sender)
 		Gone(node, sender)
 	end
 	return #missing
+end
+
+---------------------------------------------------------------------------
+-- Adaptation au client : balayage aveugle
+---------------------------------------------------------------------------
+
+local function CurrentBuild()
+	return tostring(ns.Diagnostics.GetBuild().build)
+end
+
+local function SetBlind(value, reason)
+	if blind == value then
+		return
+	end
+	blind = value
+	ns.Wipe(blindEvidence)
+	if probeStorage then
+		probeStorage.blindBuild = value and CurrentBuild() or nil
+	end
+	if value then
+		ns.Diagnostics.Log("DETECT", "balayage aveugle (%s) : détection au survol seule, essai toutes les %d s",
+			tostring(reason), AutoDetect.BLIND_RETRY_INTERVAL)
+		if not blindNoticeShown then
+			blindNoticeShown = true
+			ns.Print(ns.T("AUTO_BLIND"))
+		end
+	else
+		ns.Diagnostics.Log("DETECT", "balayage rétabli (%s)", tostring(reason))
+		if not restoredNoticeShown then
+			restoredNoticeShown = true
+			ns.Print(ns.T("AUTO_RESTORED"))
+		end
+	end
+	ns.Fire("PGR_DETECTION_MODE_CHANGED", value)
+end
+
+--- Vrai si une preuve existe déjà pour cette ressource (même nom, même endroit).
+local function HasEvidence(node, width, height)
+	for _, evidence in ipairs(blindEvidence) do
+		if evidence.name == node.name and evidence.mapID == node.mapID
+			and Yards(width, height, evidence.x, evidence.y, node.x, node.y) <= AutoDetect.EVIDENCE_SAME_YARDS then
+			return true
+		end
+	end
+	return false
+end
+
+--- Ressources survolées juste avant ce balayage, absentes de ce balayage qui n'a lu aucune ressource : le
+--- balayage ne voit plus ce que le vrai curseur voit. Chaque survol est évalué une seule fois, par le premier
+--- balayage complet qui suit, et seulement s'il date de moins de EVIDENCE_DELAY secondes. Un balayage qui
+--- lit une ressource prouve que la sonde marche : les preuves sont alors effacées (voir Finish).
+local function CheckHoverEvidence(current, context, matched, now)
+	for i = #blindEvidence, 1, -1 do
+		if now - blindEvidence[i].at > AutoDetect.EVIDENCE_WINDOW then
+			table.remove(blindEvidence, i)
+		end
+	end
+	for id, node in pairs(nodes) do
+		if node.hoverPending then
+			node.hoverPending = nil
+			if #current.hits == 0 and not matched[id] and current.kinds[node.kind]
+				and now - node.hoverAt <= AutoDetect.EVIDENCE_DELAY and IsInsideReliableZone(node, context)
+				and not HasEvidence(node, context.mapWidth, context.mapHeight) then
+				blindEvidence[#blindEvidence + 1] = { name = node.name, mapID = node.mapID, x = node.x, y = node.y,
+					at = now }
+				ns.Diagnostics.Log("DETECT", "balayage sans %s, pourtant vue au survol (%d/%d)", node.name,
+					#blindEvidence, AutoDetect.BLIND_EVIDENCE)
+			end
+		end
+	end
+	if #blindEvidence >= AutoDetect.BLIND_EVIDENCE then
+		SetBlind(true, format("%d ressource(s) survolée(s) absentes du balayage", #blindEvidence))
+	end
 end
 
 --- Oublie les ressources dont le marqueur a expiré (plus revues depuis liveTTL + uncertainTTL).
@@ -319,8 +472,10 @@ local function StopFrame()
 	end
 end
 
---- Interrompt le balayage en cours (résultats partiels abandonnés).
-function AutoDetect.Abort(reason)
+--- Interrompt le balayage en cours (résultats partiels abandonnés). `probeFailure` : la sonde elle-même a
+--- échoué (erreur, valeur secrète, API absente). Ces échecs répétés sont signalés une fois dans la discussion ;
+--- les interruptions normales (combat, souris, minicarte masquée, changement de carte) ne le sont pas.
+function AutoDetect.Abort(reason, probeFailure)
 	if not pass then
 		return
 	end
@@ -328,6 +483,15 @@ function AutoDetect.Abort(reason)
 	StopFrame()
 	AutoDetect.stats.aborted = AutoDetect.stats.aborted + 1
 	AutoDetect.stats.lastAbort = tostring(reason)
+	if not probeFailure then
+		return
+	end
+	consecutiveFailures = consecutiveFailures + 1
+	if consecutiveFailures >= AutoDetect.FAILURE_WARN_LIMIT and not failureWarned then
+		failureWarned = true
+		ns.Diagnostics.Log("DETECT", "%d balayages d'affilée en échec : %s", consecutiveFailures, tostring(reason))
+		ns.Print(ns.T("AUTO_FAILING", consecutiveFailures, tostring(reason)))
+	end
 end
 
 local function Finish()
@@ -338,8 +502,23 @@ local function Finish()
 	local context = current.context
 	local sender = ns.GetPlayerFullName()
 	AutoDetect.stats.passes = AutoDetect.stats.passes + 1
+	consecutiveFailures = 0
 	if not context or not sender then
 		return
+	end
+	if blind then
+		-- retour seulement sur une lecture plausible : une ressource lue sur presque tous les points vient d'une
+		-- infobulle restée figée, pas de la sonde
+		local plausible = #current.hits > 0 and #current.hits <= #current.points * AutoDetect.RESTORE_MAX_SHARE
+		if not plausible then
+			-- toujours aveugle : rien à apprendre, aucune absence fiable
+			for _, node in pairs(nodes) do
+				node.hoverPending = nil
+			end
+			PruneExpired(now)
+			return
+		end
+		SetBlind(false, format("%d point(s) de ressource lu(s) par le balayage", #current.hits))
 	end
 	local width, height = context.mapWidth, context.mapHeight
 	local matched = {}
@@ -350,10 +529,16 @@ local function Finish()
 		else
 			node = CreateNode(cluster, context.mapID, now)
 		end
+		node.scanAt = now
 		matched[node.id] = true
 		Publish(node, sender, now, width, height)
 	end
 	forceResend = false
+	if #current.hits > 0 then
+		-- la sonde lit des ressources : les preuves passées d'un balayage aveugle ne tiennent plus
+		ns.Wipe(blindEvidence)
+	end
+	CheckHoverEvidence(current, context, matched, now)
 	local gone = CheckMisses(current, context, matched, sender)
 	PruneExpired(now)
 	if next(matched) or gone > 0 then
@@ -380,7 +565,7 @@ local function Step()
 	local last = min(pass.index + AutoDetect.POINTS_PER_FRAME - 1, #points)
 	local cursorOk, cursorErr = pcall(Minimap.SetUsingSoftCursor, Minimap, true)
 	if not cursorOk then
-		return AutoDetect.Abort(cursorErr)
+		return AutoDetect.Abort(cursorErr, true)
 	end
 	local failure
 	for i = pass.index, last do
@@ -396,17 +581,18 @@ local function Step()
 		end
 		for _, name in ipairs(names) do
 			local kind = ns.ResourceNames.Classify(name)
-			if kind then
+			if kind and pass.kinds[kind] then
 				local _, x, y, yardsPerUnit = ns.Tracking.MinimapOffsetToMap(point[1], point[2], context)
 				pass.hits[#pass.hits + 1] = { name = name, kind = kind, x = x, y = y, yardsPerUnit = yardsPerUnit }
-			else
+			elseif not kind then
 				NoteUnknown(name)
 			end
 		end
 	end
 	pcall(Minimap.SetUsingSoftCursor, Minimap, false)
+	lastSoftCursorAt = ns.Now()
 	if failure then
-		return AutoDetect.Abort(failure)
+		return AutoDetect.Abort(failure, true)
 	end
 	pass.index = last + 1
 	pass.context = context -- position du joueur à la fin du balayage : sert aux absences
@@ -419,32 +605,178 @@ local function OnUpdate()
 	local ok, err = pcall(Step)
 	if not ok then
 		pcall(Minimap.SetUsingSoftCursor, Minimap, false)
-		AutoDetect.Abort(err)
+		AutoDetect.Abort(err, true)
 		ns.OnModuleError("AutoDetect", err)
 	end
 end
+
+local missingApiWarned = false
 
 --- Lance un balayage si les conditions sont réunies. Renvoie true s'il a démarré.
 function AutoDetect.StartPass()
 	if pass or not frame then
 		return false
 	end
-	if not AutoDetect.CanScan() then
+	local canScan, why = AutoDetect.CanScan()
+	if not canScan then
+		-- sonde retirée du client : signalé une fois, aux personnages qui pistent quelque chose
+		if why == "api" and not missingApiWarned and ActiveKinds() then
+			missingApiWarned = true
+			ns.Diagnostics.Log("DETECT", "fonctions de sondage absentes : détection au survol seule")
+			ns.Print(ns.T("AUTO_NO_PROBE_API"))
+		end
 		return false
 	end
 	local kinds = ActiveKinds()
 	if not kinds or not ns.GetPlayerFullName() then
 		return false
 	end
+	local now = ns.Now()
+	if blind then
+		if not blindNoticeShown then
+			-- état mémorisé pour ce build : rappel une fois par session
+			blindNoticeShown = true
+			ns.Print(ns.T("AUTO_BLIND_REMINDER"))
+		end
+		if lastPassStartedAt and now - lastPassStartedAt < AutoDetect.BLIND_RETRY_INTERVAL then
+			return false
+		end
+	end
 	local context = ns.Tracking.GetProjectionContext()
 	if not context then
 		return false
 	end
+	lastPassStartedAt = now
 	pass = {
 		kinds = kinds, mapID = context.mapID, index = 1, hits = {},
 		points = ns.Tracking.BuildGrid(context.halfWidth, context.halfHeight, AutoDetect.GRID_SPACING),
 	}
 	frame:SetScript("OnUpdate", OnUpdate)
+	return true
+end
+
+---------------------------------------------------------------------------
+-- Survol : infobulle native sous le vrai curseur
+---------------------------------------------------------------------------
+
+--- Décalage du curseur par rapport au centre de la minicarte, en unités du cadre, ou nil.
+local function CursorOffset()
+	if not GetCursorPosition then
+		return nil
+	end
+	local cursorX, cursorY = GetCursorPosition()
+	if ns.AnySecret(cursorX, cursorY) or type(cursorX) ~= "number" or type(cursorY) ~= "number" then
+		return nil
+	end
+	local centerX, centerY = Minimap:GetCenter()
+	if ns.AnySecret(centerX, centerY) or type(centerX) ~= "number" or type(centerY) ~= "number" then
+		return nil
+	end
+	local scale = Minimap:GetEffectiveScale()
+	return cursorX / scale - centerX, cursorY / scale - centerY
+end
+
+--- Lit l'infobulle de minicarte sous le vrai curseur et suit les herbes et minerais qu'elle nomme.
+--- Renvoie le nombre de ressources lues.
+function AutoDetect.ReadHover(now)
+	if not ns.Config.Get("enabled") or not ns.Config.Get("autoDetect") then
+		return 0
+	end
+	if not (Minimap and Minimap:IsVisible() and Minimap:IsMouseOver()) or ns.Tracking.IsScanRunning() then
+		return 0
+	end
+	if InCombatLockdown and InCombatLockdown() then
+		return 0
+	end
+	-- juste après un balayage, l'infobulle peut encore nommer le dernier point sondé, pas celui du curseur
+	if pass or (lastSoftCursorAt and now - lastSoftCursorAt < 0.5) then
+		return 0
+	end
+	if AutoDetect.IsAddOnRestricted() then
+		return 0
+	end
+	local kinds = ActiveKinds()
+	local sender = ns.GetPlayerFullName()
+	if not kinds or not sender then
+		return 0
+	end
+	local names = ns.Tracking.ReadMinimapMouseover()
+	if not names or #names == 0 then
+		return 0
+	end
+	local found = {}
+	for _, name in ipairs(names) do
+		local kind = ns.ResourceNames.Classify(name)
+		if kind then
+			if kinds[kind] then
+				found[#found + 1] = { name = name, kind = kind }
+			end
+		else
+			NoteUnknown(name)
+		end
+	end
+	if #found == 0 then
+		return 0
+	end
+	local context = ns.Tracking.GetProjectionContext()
+	local dx, dy = CursorOffset()
+	if not context or not dx then
+		return 0
+	end
+	local limit = min(context.halfWidth, context.halfHeight)
+	if dx * dx + dy * dy > limit * limit then
+		return 0
+	end
+	local _, x, y, yardsPerUnit = ns.Tracking.MinimapOffsetToMap(dx, dy, context)
+	local width, height = context.mapWidth, context.mapHeight
+	for _, item in ipairs(found) do
+		local cluster = { name = item.name, kind = item.kind, x = x, y = y, hits = 1, spread = 0,
+			yardsPerUnit = yardsPerUnit }
+		local node = FindNode(cluster, context.mapID, width, height)
+		if node then
+			UpdateNode(node, cluster, now)
+		else
+			node = CreateNode(cluster, context.mapID, now, true)
+		end
+		node.hoverAt = now
+		node.hoverPending = true
+		Publish(node, sender, now, width, height)
+	end
+	ns.Fire("PGR_MARKERS_CHANGED")
+	return #found
+end
+
+---------------------------------------------------------------------------
+-- Récolte : herbe retirée dès qu'elle est cueillie
+---------------------------------------------------------------------------
+
+--- Retire l'herbe `name` suivie la plus proche du joueur (au plus GATHER_RADIUS mètres). Renvoie true si trouvée.
+local function RemoveGathered(name)
+	local mapID, playerX, playerY = ns.Coordinates.GetPlayerMapPosition()
+	local sender = ns.GetPlayerFullName()
+	if not mapID or not sender then
+		return false
+	end
+	local width, height = ns.Coordinates.GetMapSizeYards(mapID)
+	if not width then
+		return false
+	end
+	local key = ns.ResourceNames.Normalize(name)
+	local best, bestDistance
+	for _, node in pairs(nodes) do
+		if node.kind == "HERB" and node.mapID == mapID and ns.ResourceNames.Normalize(node.name) == key then
+			local distance = Yards(width, height, playerX, playerY, node.x, node.y)
+			if distance <= AutoDetect.GATHER_RADIUS and (not bestDistance or distance < bestDistance) then
+				best, bestDistance = node, distance
+			end
+		end
+	end
+	if not best then
+		return false
+	end
+	Gone(best, sender, "récoltée")
+	AutoDetect.stats.gathered = AutoDetect.stats.gathered + 1
+	ns.Fire("PGR_MARKERS_CHANGED")
 	return true
 end
 
@@ -461,9 +793,10 @@ local function GatherKind(spellID)
 	if C_Spell and C_Spell.GetSpellName then
 		local name = C_Spell.GetSpellName(spellID)
 		if type(name) == "string" and not ns.IsSecret(name) then
-			if name == C_Spell.GetSpellName(HERB_GATHERING_SPELL) then
+			local herbName, miningName = C_Spell.GetSpellName(HERB_GATHERING_SPELL), C_Spell.GetSpellName(MINING_SPELL)
+			if not ns.IsSecret(herbName) and name == herbName then
 				return "HERB"
-			elseif name == C_Spell.GetSpellName(MINING_SPELL) then
+			elseif not ns.IsSecret(miningName) and name == miningName then
 				return "ORE"
 			end
 		end
@@ -471,13 +804,31 @@ local function GatherKind(spellID)
 	return nil
 end
 
-local function OnSpellcastSent(_, unit, target, _, spellID)
-	if ns.AnySecret(unit, target, spellID) or unit ~= "player" or type(target) ~= "string" or target == "" then
+local function OnSpellcastSent(_, unit, target, castGUID, spellID)
+	if ns.AnySecret(unit, target, castGUID, spellID) or unit ~= "player" or type(target) ~= "string"
+		or target == "" then
 		return
 	end
 	local kind = GatherKind(spellID)
-	if kind and ns.ResourceNames.Learn(kind, target) then
+	if not kind then
+		return
+	end
+	lastGather = { castGUID = castGUID, kind = kind, name = target }
+	if ns.ResourceNames.Learn(kind, target) then
 		ns.Diagnostics.Log("DETECT", "nom appris à la récolte : %s (%s)", target, kind == "HERB" and "herbe" or "minerai")
+	end
+end
+
+--- Récolte réussie : l'herbe cueillie disparaît de la minicarte, elle est retirée sans attendre un balayage
+--- (indispensable quand le balayage est aveugle). Un filon peut rester après un minage : il n'est pas retiré.
+local function OnSpellcastSucceeded(_, unit, castGUID)
+	if ns.AnySecret(unit, castGUID) or unit ~= "player" or not lastGather or lastGather.castGUID ~= castGUID then
+		return
+	end
+	local gather = lastGather
+	lastGather = nil
+	if gather.kind == "HERB" then
+		RemoveGathered(gather.name)
 	end
 end
 
@@ -493,13 +844,19 @@ function AutoDetect.IsRunning()
 	return pass ~= nil
 end
 
+--- Vrai si le balayage est déclaré aveugle (client restreint) : détection au survol seule.
+function AutoDetect.IsProbeBlind()
+	return blind
+end
+
 --- Résumé pour /pgr status et /pgr diag.
 function AutoDetect.Describe()
 	local stats = AutoDetect.stats
-	return format("%d balayage(s), %d interrompu(s)%s, %d ressource(s) suivie(s), %d trouvée(s), %d disparue(s), "
-		.. "%d nom(s) ignoré(s)", stats.passes, stats.aborted,
-		stats.lastAbort and (" (dernier : " .. stats.lastAbort .. ")") or "", nodeCount, stats.found, stats.gone,
-		unknownCount)
+	return format("mode %s, %d balayage(s), %d interrompu(s)%s, %d ressource(s) suivie(s), %d trouvée(s) dont %d "
+		.. "au survol, %d disparue(s) dont %d récoltée(s), %d nom(s) ignoré(s)",
+		blind and "survol (balayage aveugle)" or "balayage et survol", stats.passes, stats.aborted,
+		stats.lastAbort and (" (dernier : " .. stats.lastAbort .. ")") or "", nodeCount, stats.found, stats.hovered,
+		stats.gone, stats.gathered, unknownCount)
 end
 
 ---------------------------------------------------------------------------
@@ -513,8 +870,27 @@ ns.On("PGR_CONFIG_LOADED", "AutoDetect", function()
 	frame = CreateFrame("Frame")
 	-- identifiants uniques d'une session à l'autre (un /reload ne réutilise pas ceux d'avant)
 	sessionTag = format("%x", floor(ns.Now() * 10) % 65536)
+	-- balayage aveugle mémorisé pour ce build du client ; un nouveau build est réévalué
+	if type(ns.db.probe) ~= "table" then
+		ns.db.probe = {}
+	end
+	probeStorage = ns.db.probe
+	local blindBuild = probeStorage.blindBuild
+	if blindBuild ~= nil and tostring(blindBuild) == CurrentBuild() then
+		blind = true
+		ns.Diagnostics.Log("DETECT", "balayage aveugle sur le build %s (mémorisé) : détection au survol seule",
+			tostring(blindBuild))
+	elseif blindBuild ~= nil then
+		probeStorage.blindBuild = nil
+		ns.Diagnostics.Log("DETECT", "nouveau build %s (aveugle sur %s) : balayage réévalué", CurrentBuild(),
+			tostring(blindBuild))
+	end
 	ns.NewTicker(AutoDetect.PASS_INTERVAL, "AutoDetect", AutoDetect.StartPass)
+	ns.NewTicker(AutoDetect.HOVER_INTERVAL, "AutoDetect", function()
+		AutoDetect.ReadHover(ns.Now())
+	end)
 	ns.RegisterEvent("UNIT_SPELLCAST_SENT", "AutoDetect", OnSpellcastSent)
+	ns.RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", "AutoDetect", OnSpellcastSucceeded)
 end)
 
 ns.On("PGR_SETTING_CHANGED", "AutoDetect", function(_, key, value)

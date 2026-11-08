@@ -2,7 +2,9 @@
 
 **Share the herbs and ore nodes your minimap tracking reveals with your whole party.** One gatherer tracks, everyone in the group sees the nodes on their own minimap.
 
-> **Experimental prototype for World of Warcraft: Forever (beta 1.60.1, interface 16001).** It relies on minimap APIs that only exist on Forever. Group communication and herb detection have been checked in game with two clients; the full automatic sharing is new, so please report what you see.
+> **Experimental prototype for World of Warcraft: Forever (1.60.1, interface 16001).** It relies on minimap APIs that only exist on Forever. Group communication and herb detection have been checked in game with two clients; please report what you see.
+>
+> **November 2026:** a WoW Forever update no longer lets addons read the minimap remotely. Version 0.4.0 notices it by itself and switches to **hover detection**: move your mouse over a herb or ore on your minimap and it is shared with your group. If the probe comes back, automatic detection comes back too.
 
 ## How it works
 
@@ -10,6 +12,7 @@
 2. Every 2 seconds the addon reads the gatherer's minimap through Forever's official minimap probe API and keeps only known herb and ore names (quest areas and player names are ignored).
 3. Each node is sent to the group. Other members see an icon at the same place on **their own minimap**; hovering it shows the plant name, who found it and how old the information is.
 4. When the node disappears (gathered), its icon is removed for everyone within a few seconds.
+5. If the client blocks the minimap sweep, nodes you hover with the mouse on your minimap are shared instead, and a herb you pick is removed for everyone right away.
 
 ## Features
 
@@ -17,6 +20,7 @@
 - Works both ways: any gatherer in the group shares with everyone.
 - Minimap button and settings window (`/pgr`): addon version, which party members use PartyGatherRadar, show or hide other players' information, sharing, herbs, ores.
 - Herb names learned automatically the first time you gather a plant missing from the built-in list.
+- Adapts to the client: a blocked sweep, repeated probe failures and addon restrictions (encounters, Mythic+, PvP) are detected and reported once in chat.
 - Diagnostics for bug reports: `/pgr diag`, saved to the SavedVariables.
 - French and English.
 
@@ -35,6 +39,7 @@
 ## Known limitations
 
 - Experimental: icon accuracy is about 10 to 30 m when the minimap is zoomed out.
+- On the restricted live client, only hovered nodes are shared; hover detection is not yet verified in game.
 - Herb and ore names are matched in French and English; other client languages learn names when gathering.
 - Addon messages only reach party or raid members; trial accounts cannot send addon messages on Forever.
 
@@ -44,7 +49,9 @@
 
 **Partagez avec tout le groupe les herbes et minerais que le pistage affiche sur votre minicarte.** Un herboriste ou un mineur piste, chaque membre du groupe voit les ressources sur sa propre minicarte.
 
-> **Prototype expérimental pour World of Warcraft: Forever (bêta 1.60.1, interface 16001).** Il utilise des fonctions de minicarte propres à Forever. La communication de groupe et la lecture des plantes ont été vérifiées en jeu avec deux clients ; le partage automatique complet est nouveau : vos retours sont les bienvenus.
+> **Prototype expérimental pour World of Warcraft: Forever (1.60.1, interface 16001).** Il utilise des fonctions de minicarte propres à Forever. La communication de groupe et la lecture des plantes ont été vérifiées en jeu avec deux clients ; vos retours sont les bienvenus.
+>
+> **Novembre 2026 :** une mise à jour de WoW Forever ne laisse plus les addons lire la minicarte à distance. La version 0.4.0 le repère seule et passe en **détection au survol** : passez la souris sur une herbe ou un minerai de votre minicarte, il est partagé avec le groupe. Si la sonde revient, la détection automatique revient aussi.
 
 ## Fonctionnement
 
@@ -52,6 +59,7 @@
 2. Toutes les 2 secondes, l'addon lit sa minicarte avec la fonction officielle de sondage de Forever et ne garde que les noms d'herbes et de minerais connus (zones de quête et joueurs ignorés).
 3. Chaque ressource est envoyée au groupe. Les autres membres voient une icône au même endroit **sur leur propre minicarte** ; le survol affiche le nom de la plante, qui l'a trouvée et depuis quand.
 4. Quand la ressource disparaît (récoltée), son icône est retirée chez tout le monde en quelques secondes.
+5. Si le client bloque le balayage de la minicarte, les ressources survolées à la souris sur votre minicarte sont partagées à la place, et une herbe cueillie est retirée chez tous tout de suite.
 
 ## Fonctions
 
@@ -59,6 +67,7 @@
 - Dans les deux sens : chaque récolteur du groupe partage avec tous.
 - Bouton de minicarte et fenêtre de réglages (`/pgr`) : version, membres qui utilisent l'addon, afficher ou masquer les infos des autres joueurs, partage, herbes, minerais.
 - Noms d'herbes appris à la première récolte d'une plante absente de la liste.
+- S'adapte au client : balayage bloqué, échecs répétés de la sonde et restrictions d'addons (rencontres, mode défi, JcJ) repérés et signalés une fois dans la discussion.
 - Diagnostic pour les rapports de bogue : `/pgr diag`, sauvegardé dans les SavedVariables.
 - Français et anglais.
 
@@ -77,6 +86,7 @@
 ## Limites connues
 
 - Expérimental : précision des icônes d'environ 10 à 30 m quand la minicarte est dézoomée.
+- Sur le client live restreint, seules les ressources survolées sont partagées ; détection au survol pas encore vérifiée en jeu.
 - Noms d'herbes et de minerais reconnus en français et en anglais ; dans les autres langues, les noms sont appris à la récolte.
 - Les messages d'addon n'atteignent que les membres du groupe ou du raid ; les comptes d'essai ne peuvent pas en envoyer sur Forever.
 

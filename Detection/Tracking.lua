@@ -8,7 +8,9 @@
 --   C_TooltipInfo.GetMinimapMouseover()         -- noms des points situés sous ce survol
 -- Les sondes ci-dessous les utilisent uniquement à la demande (/pgr probe ...), hors combat,
 -- jamais pendant que le vrai curseur survole la minicarte. Elles n'activent aucun pistage et
--- ne déplacent pas le personnage. Le module de détection continue est prévu en phase 2.
+-- ne déplacent pas le personnage. La détection continue est dans Detection/AutoDetect.lua.
+-- Depuis une mise à jour de novembre 2026, le client ne nomme plus un point que sous le vrai curseur :
+-- le balayage par curseur logiciel ne trouve plus rien (voir AutoDetect, mode survol).
 
 local addonName, ns = ...
 
@@ -391,6 +393,9 @@ local function FinishScan(aborted)
 	end
 	-- un repère au bord de la carte (coordonnées hors 0..1) est refusé : seul le nombre réel est annoncé
 	ns.Print(ns.T("PROBE_SCAN_MARKERS", placed, #clusters))
+	if #clusters == 0 and ns.AutoDetect and ns.AutoDetect.IsProbeBlind() then
+		ns.Print(ns.T("PROBE_SCAN_BLIND"))
+	end
 	ns.Fire("PGR_MARKERS_CHANGED")
 end
 
