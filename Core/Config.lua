@@ -24,12 +24,20 @@ Config.DEFAULTS = {
 	-- Détection automatique (pistage actif, minicarte sondée toutes les 2 s)
 	autoDetect = true,
 	showOwnDetections = false,  -- nos détections sur notre minicarte (contrôle de la superposition)
+	-- détection de proximité sans souris : l'addon active le ciblage doux du jeu (réglages d'origine rétablis
+	-- quand l'option est coupée) ; sans elle, la cible douce n'est jamais lue
+	proximityDetect = false,
+	-- masque « Aucun joueur nommé '…' ne joue actuellement » quand il vise un membre du groupe connecté
+	-- (chuchotement d'un autre addon avec un nom mal formé ; UI/ChatFilter.lua)
+	hideNotFound = true,
 
 	-- Ressources
 	showHerbs = true,
 	showOres = true,
 	showLive = true,
-	showHistory = true,
+	showHistory = true,         -- positions historiques, dont les emplacements connus (présence non confirmée)
+	showSpawns = false,         -- points d'apparition lus dans QuestieDB s'il est installé (présence non confirmée ;
+	                            -- désactivés par défaut : seules les plantes signalées s'affichent)
 
 	-- Apparence
 	iconSize = 14,

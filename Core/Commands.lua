@@ -44,7 +44,23 @@ local function PrintStatus()
 	local real, test = ns.MarkerManager.Count()
 	ns.Print(ns.T("STATUS_MARKERS", real, test, ns.MinimapOverlay.GetVisibleCount()))
 	ns.Print(ns.T("STATUS_DETECTION", YesNo(ns.Config.Get("autoDetect")), ns.AutoDetect.Describe()))
+	local proximityOn, softTargetOn, near = ns.Proximity.Describe()
+	ns.Print(ns.T("STATUS_PROXIMITY", YesNo(proximityOn), softTargetOn and ns.T("ACTIVE") or ns.T("INACTIVE"), near))
+	local mapID = ns.Coordinates.GetPlayerMapPosition()
+	ns.Print(ns.T("STATUS_SPOTS", mapID and ns.KnownSpots.Count(mapID) or 0, ns.KnownSpots.Count(),
+		YesNo(ns.Config.Get("showHistory"))))
+	ns.Print(ns.T("STATUS_SPAWNS", ns.T("SPAWNS_STATE_" .. ns.SpawnPoints.GetState():upper()),
+		mapID and ns.SpawnPoints.Count(mapID) or 0, YesNo(ns.Config.Get("showSpawns"))))
 	ns.Diagnostics.PrintCapabilities()
+end
+
+local function Spots(argument)
+	if argument == "clear" then
+		ns.Print(ns.T("SPOTS_CLEARED", ns.KnownSpots.Clear()))
+		return
+	end
+	local mapID = ns.Coordinates.GetPlayerMapPosition()
+	ns.Print(ns.T("SPOTS_COUNT", mapID and ns.KnownSpots.Count(mapID) or 0, ns.KnownSpots.Count()))
 end
 
 local function FormatCaps(caps)
@@ -230,7 +246,8 @@ end
 ---------------------------------------------------------------------------
 
 local TOGGLES = { share = "shareEnabled", receive = "receiveEnabled", minimap = "showMinimap",
-	button = "showMinimapButton", auto = "autoDetect" }
+	button = "showMinimapButton", auto = "autoDetect", near = "proximityDetect", quiet = "hideNotFound",
+	spawns = "showSpawns" }
 
 local function SetToggle(key, argument)
 	local value
@@ -251,7 +268,7 @@ end
 
 local HELP_KEYS = {
 	"HELP_PGR", "HELP_HELP", "HELP_STATUS", "HELP_DEBUG", "HELP_TEST", "HELP_PEERS", "HELP_CLEAR", "HELP_VERSION",
-	"HELP_DIAG", "HELP_PROBE", "HELP_LOG", "HELP_TOGGLES",
+	"HELP_DIAG", "HELP_PROBE", "HELP_LOG", "HELP_SPOTS", "HELP_TOGGLES",
 }
 
 local function OpenSettings()
@@ -275,6 +292,7 @@ local HANDLERS = {
 	test = RunTest,
 	diag = PrintDiagnostics,
 	probe = Probe,
+	spots = Spots,
 	debug = function()
 		local value = not ns.Config.Get("debug")
 		ns.Config.Set("debug", value)

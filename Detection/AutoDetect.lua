@@ -35,6 +35,10 @@
 --
 -- Récolte : une herbe récoltée par le joueur (sort réussi) est retirée tout de suite, chez lui et dans le
 -- groupe. Un filon n'est pas retiré, car il peut souvent être miné plusieurs fois.
+--
+-- Sans souris (0.5.0) : une ressource vue de près par la cible d'interaction douce du jeu (Detection/Proximity.lua)
+-- est suivie et partagée comme une ressource survolée, à la position du joueur. Chaque ressource suivie, et
+-- chaque récolte, alimente aussi les emplacements connus (Map/KnownSpots.lua).
 
 local addonName, ns = ...
 
@@ -64,6 +68,9 @@ AutoDetect.BLIND_EVIDENCE = 2      -- ressources survolées absentes d'un balaya
 AutoDetect.BLIND_RETRY_INTERVAL = 30 -- balayage aveugle : un essai toutes les 30 s pour repérer son retour
 AutoDetect.FAILURE_WARN_LIMIT = 5  -- balayages d'affilée interrompus par une erreur de sonde : alerte
 AutoDetect.GATHER_RADIUS = 20      -- mètres : herbe du même nom retirée autour du joueur après la récolte
+AutoDetect.GATHER_ACCURACY = 5     -- mètres : emplacement d'une ressource récoltée (le joueur est à portée)
+-- secondes : une herbe cueillie que la cible douce désigne encore n'est pas signalée de nouveau
+AutoDetect.GATHERED_IGNORE_SECONDS = 60
 AutoDetect.EVIDENCE_WINDOW = 600   -- secondes : une preuve de balayage aveugle plus ancienne ne compte plus
 AutoDetect.EVIDENCE_DELAY = 10     -- secondes : un survol plus ancien n'est plus comparé au balayage suivant
 AutoDetect.EVIDENCE_SAME_YARDS = 50 -- deux preuves du même nom à moins de 50 m : une seule ressource
@@ -101,8 +108,11 @@ local lastSoftCursorAt       -- dernier usage du curseur logiciel : l'infobulle 
 local consecutiveFailures = 0
 local failureWarned = false
 local lastGather             -- dernier sort de récolte envoyé : { castGUID, kind, name }
+-- herbes cueillies depuis moins de GATHERED_IGNORE_SECONDS : { name (normalisé), mapID, x, y, at, key, logged }
+local recentGathers = {}
 
-AutoDetect.stats = { passes = 0, aborted = 0, lastAbort = nil, found = 0, gone = 0, hovered = 0, gathered = 0 }
+AutoDetect.stats = { passes = 0, aborted = 0, lastAbort = nil, found = 0, gone = 0, hovered = 0, near = 0,
+	gathered = 0 }
 
 ---------------------------------------------------------------------------
 -- Conditions
@@ -272,7 +282,10 @@ local function OldestNode()
 	return oldest
 end
 
-local function CreateNode(cluster, mapID, now, byHover)
+local HOW_LABELS = { hover = " (survol)", near = " (proximité)" }
+
+--- Nouvelle ressource suivie. `how` : nil (balayage), "hover" (survol) ou "near" (proximité).
+local function CreateNode(cluster, mapID, now, how)
 	if nodeCount >= AutoDetect.MAX_NODES then
 		local oldest = OldestNode()
 		if oldest then
@@ -286,17 +299,23 @@ local function CreateNode(cluster, mapID, now, byHover)
 	nodes[node.id] = node
 	nodeCount = nodeCount + 1
 	AutoDetect.stats.found = AutoDetect.stats.found + 1
-	if byHover then
+	if how == "hover" then
 		AutoDetect.stats.hovered = AutoDetect.stats.hovered + 1
+	elseif how == "near" then
+		AutoDetect.stats.near = AutoDetect.stats.near + 1
 	end
 	ns.Diagnostics.Log("DETECT", "%s : %s, carte %d (%.2f, %.2f) ±%.0f m%s", node.kind == "HERB" and "herbe" or "minerai",
-		node.name, mapID, node.x * 100, node.y * 100, node.accuracy, byHover and " (survol)" or "")
+		node.name, mapID, node.x * 100, node.y * 100, node.accuracy, how and HOW_LABELS[how] or "")
 	return node
 end
 
---- Vrai si la ressource n'a été vue qu'au survol depuis le dernier balayage qui l'a trouvée.
+--- Vrai si la ressource n'a été vue qu'au survol ou de près depuis le dernier balayage qui l'a trouvée.
 local function IsHoverOnly(node)
-	return node.hoverAt ~= nil and (node.scanAt == nil or node.scanAt < node.hoverAt)
+	local seenAt = node.hoverAt
+	if node.nearAt and (seenAt == nil or node.nearAt > seenAt) then
+		seenAt = node.nearAt
+	end
+	return seenAt ~= nil and (node.scanAt == nil or node.scanAt < seenAt)
 end
 
 local function UpdateNode(node, cluster, now)
@@ -337,13 +356,15 @@ local function SendIfDue(node, now, width, height, minInterval)
 	end
 end
 
---- Marqueur local (jamais affiché sur sa propre minicarte, sauf réglage showOwnDetections) et envoi au groupe.
+--- Marqueur local (jamais affiché sur sa propre minicarte, sauf réglage showOwnDetections), emplacement connu et
+--- envoi au groupe.
 local function Publish(node, sender, now, width, height, minInterval)
 	ns.MarkerManager.Upsert({
 		sender = sender, id = node.id, source = "LIVE", kind = node.kind,
 		state = node.sentOnce and "UPDATED" or "DETECTED", uiMapID = node.mapID, x = node.x, y = node.y,
 		accuracy = node.accuracy, name = node.name, isLocal = true,
 	}, now)
+	ns.KnownSpots.Record(node.kind, node.name, node.mapID, node.x, node.y, node.accuracy, true)
 	SendIfDue(node, now, width, height, minInterval)
 end
 
@@ -678,6 +699,52 @@ end
 -- Survol : infobulle native sous le vrai curseur
 ---------------------------------------------------------------------------
 
+local function FindNodeByKey(key, mapID)
+	for _, node in pairs(nodes) do
+		if node.key == key and node.mapID == mapID then
+			return node
+		end
+	end
+	return nil
+end
+
+--- Suit une ressource vue hors balayage et la partage, avec l'espacement des renvois du survol. `how` : "hover"
+--- (sous le vrai curseur) ou "near" (cible d'interaction douce, à la position du joueur). `key` (facultatif) :
+--- identifiant de l'objet (GUID de la cible douce). Le même objet reste une seule ressource, même vu de deux
+--- côtés ; deux objets différents ne sont jamais fusionnés. Vue de près : plus précise que la position suivie,
+--- elle la remplace ; moins précise, elle confirme la présence sans déplacer la ressource.
+local function TrackSighting(cluster, mapID, now, how, sender, width, height, key)
+	local node = key and FindNodeByKey(key, mapID)
+	if not node then
+		node = FindNode(cluster, mapID, width, height)
+		if node and key and node.key and node.key ~= key then
+			node = nil -- autre objet du même nom, tout près
+		end
+	end
+	local accuracy = Accuracy(cluster)
+	if not node then
+		node = CreateNode(cluster, mapID, now, how)
+	elseif how == "near" and accuracy > node.accuracy then
+		node.lastSeen, node.misses = now, 0
+	elseif how == "near" and accuracy < node.accuracy then
+		-- le joueur est à moins de `accuracy` mètres de l'objet : la moyenne des vues plus lointaines est écartée
+		node.x, node.y, node.weight, node.accuracy = cluster.x, cluster.y, cluster.hits, accuracy
+		node.lastSeen, node.misses = now, 0
+	else
+		UpdateNode(node, cluster, now)
+	end
+	if key then
+		node.key = key
+	end
+	if how == "hover" then
+		node.hoverAt, node.hoverPending = now, true
+	else
+		node.nearAt = now
+	end
+	Publish(node, sender, now, width, height, AutoDetect.HOVER_RESEND_INTERVAL)
+	return node
+end
+
 --- Décalage du curseur par rapport au centre de la minicarte, en unités du cadre, ou nil.
 local function CursorOffset()
 	if not GetCursorPosition then
@@ -751,18 +818,63 @@ function AutoDetect.ReadHover(now)
 	for _, item in ipairs(found) do
 		local cluster = { name = item.name, kind = item.kind, x = x, y = y, hits = 1, spread = 0,
 			yardsPerUnit = yardsPerUnit }
-		local node = FindNode(cluster, context.mapID, width, height)
-		if node then
-			UpdateNode(node, cluster, now)
-		else
-			node = CreateNode(cluster, context.mapID, now, true)
-		end
-		node.hoverAt = now
-		node.hoverPending = true
-		Publish(node, sender, now, width, height, AutoDetect.HOVER_RESEND_INTERVAL)
+		TrackSighting(cluster, context.mapID, now, "hover", sender, width, height)
 	end
 	ns.Fire("PGR_MARKERS_CHANGED")
 	return #found
+end
+
+--- Vrai si une vue de près désigne une herbe cueillie à l'instant. La cible douce désigne encore la plante le temps
+--- qu'elle disparaisse (constaté en jeu le 2026-11-09 : revue 0,3 s après la cueillette) ; la signaler la ferait
+--- réapparaître chez les autres et lèverait la marque « récolté » de l'emplacement. Même objet si les deux GUID
+--- sont connus ; sinon même nom, à portée de l'endroit de la cueillette.
+local function JustGathered(name, mapID, x, y, accuracy, key, now, width, height)
+	local normalized = ns.ResourceNames.Normalize(name)
+	for _, gathered in ipairs(recentGathers) do
+		if now - gathered.at < AutoDetect.GATHERED_IGNORE_SECONDS and gathered.mapID == mapID then
+			local same
+			if key and gathered.key then
+				same = key == gathered.key
+			else
+				same = gathered.name == normalized
+					and Yards(width, height, x, y, gathered.x, gathered.y) <= accuracy + AutoDetect.GATHER_ACCURACY
+			end
+			if same then
+				if not gathered.logged then
+					gathered.logged = true
+					ns.Diagnostics.Log("DETECT", "proximité : %s ignorée, cueillie à l'instant", name)
+				end
+				return true
+			end
+		end
+	end
+	return false
+end
+
+--- Ressource vue sans souris par la cible d'interaction douce du jeu (Detection/Proximity.lua) : suivie et
+--- partagée comme une ressource survolée. (x, y) : position du joueur ; `accuracy` : distance maximale de la
+--- ressource, en mètres ; `key` : identifiant de l'objet (GUID). Le pistage n'est pas nécessaire : la cible douce
+--- voit l'objet lui-même. Renvoie true si la ressource a été prise en compte.
+function AutoDetect.ReportNearby(name, kind, mapID, x, y, accuracy, now, key)
+	if not ns.Config.Get("enabled") or not ns.Config.Get("autoDetect") then
+		return false
+	end
+	if (InCombatLockdown and InCombatLockdown()) or AutoDetect.IsAddOnRestricted() then
+		return false
+	end
+	local sender = ns.GetPlayerFullName()
+	local width, height = ns.Coordinates.GetMapSizeYards(mapID)
+	if not sender or not width or (kind ~= "HERB" and kind ~= "ORE") then
+		return false
+	end
+	if kind == "HERB" and JustGathered(name, mapID, x, y, accuracy, key, now, width, height) then
+		return false
+	end
+	-- yardsPerUnit = 0 : rapprochement avec une ressource suivie à MATCH_MIN_YARDS, précision = accuracy
+	local cluster = { name = name, kind = kind, x = x, y = y, hits = 1, spread = accuracy, yardsPerUnit = 0 }
+	TrackSighting(cluster, mapID, now, "near", sender, width, height, key)
+	ns.Fire("PGR_MARKERS_CHANGED")
+	return true
 end
 
 --- Envoie les positions affinées au survol restées en attente, une fois HOVER_RESEND_INTERVAL écoulé depuis
@@ -790,16 +902,17 @@ end
 -- Récolte : herbe retirée dès qu'elle est cueillie
 ---------------------------------------------------------------------------
 
---- Retire l'herbe `name` suivie la plus proche du joueur (au plus GATHER_RADIUS mètres). Renvoie true si trouvée.
+--- Retire l'herbe `name` suivie la plus proche du joueur (au plus GATHER_RADIUS mètres). Renvoie la ressource
+--- retirée, ou nil.
 local function RemoveGathered(name)
 	local mapID, playerX, playerY = ns.Coordinates.GetPlayerMapPosition()
 	local sender = ns.GetPlayerFullName()
 	if not mapID or not sender then
-		return false
+		return nil
 	end
 	local width, height = ns.Coordinates.GetMapSizeYards(mapID)
 	if not width then
-		return false
+		return nil
 	end
 	local key = ns.ResourceNames.Normalize(name)
 	local best, bestDistance
@@ -812,12 +925,28 @@ local function RemoveGathered(name)
 		end
 	end
 	if not best then
-		return false
+		return nil
 	end
 	Gone(best, sender, "récoltée")
 	AutoDetect.stats.gathered = AutoDetect.stats.gathered + 1
 	ns.Fire("PGR_MARKERS_CHANGED")
-	return true
+	return best
+end
+
+--- Herbe cueillie à la position du joueur : gardée GATHERED_IGNORE_SECONDS secondes (JustGathered). `key` : GUID
+--- de la ressource retirée, s'il est connu.
+local function NoteGathered(name, key, now)
+	for index = #recentGathers, 1, -1 do
+		if now - recentGathers[index].at >= AutoDetect.GATHERED_IGNORE_SECONDS then
+			table.remove(recentGathers, index)
+		end
+	end
+	local mapID, x, y = ns.Coordinates.GetPlayerMapPosition()
+	if mapID then
+		recentGathers[#recentGathers + 1] = {
+			name = ns.ResourceNames.Normalize(name), mapID = mapID, x = x, y = y, at = now, key = key,
+		}
+	end
 end
 
 ---------------------------------------------------------------------------
@@ -859,16 +988,27 @@ local function OnSpellcastSent(_, unit, target, castGUID, spellID)
 	end
 end
 
---- Récolte réussie : l'herbe cueillie disparaît de la minicarte, elle est retirée sans attendre un balayage
---- (indispensable quand le balayage est aveugle). Un filon peut rester après un minage : il n'est pas retiré.
+--- Récolte réussie : l'endroit devient un emplacement connu (le joueur est à portée de la ressource), même sans
+--- pistage, marqué récolté (pas affiché tout de suite à la place de la ressource). L'herbe cueillie disparaît de
+--- la minicarte : elle est retirée sans attendre un balayage (indispensable quand le balayage est aveugle). Un
+--- filon peut rester après un minage : il n'est pas retiré, et une nouvelle vue lève la marque.
 local function OnSpellcastSucceeded(_, unit, castGUID)
 	if ns.AnySecret(unit, castGUID) or unit ~= "player" or not lastGather or lastGather.castGUID ~= castGUID then
 		return
 	end
 	local gather = lastGather
 	lastGather = nil
+	if ns.Config.Get("enabled") then
+		local mapID, x, y = ns.Coordinates.GetPlayerMapPosition()
+		if mapID and ns.KnownSpots.Record(gather.kind, gather.name, mapID, x, y, AutoDetect.GATHER_ACCURACY, true) then
+			ns.KnownSpots.MarkGathered(gather.kind, mapID, x, y, AutoDetect.GATHER_ACCURACY)
+			ns.Diagnostics.Log("DETECT", "emplacement de récolte : %s, carte %d (%.2f, %.2f)", gather.name, mapID,
+				x * 100, y * 100)
+		end
+	end
 	if gather.kind == "HERB" then
-		RemoveGathered(gather.name)
+		local removed = RemoveGathered(gather.name)
+		NoteGathered(gather.name, removed and removed.key, ns.Now())
 	end
 end
 
@@ -893,10 +1033,10 @@ end
 function AutoDetect.Describe()
 	local stats = AutoDetect.stats
 	return format("mode %s, %d balayage(s), %d interrompu(s)%s, %d ressource(s) suivie(s), %d trouvée(s) dont %d "
-		.. "au survol, %d disparue(s) dont %d récoltée(s), %d nom(s) ignoré(s)",
+		.. "au survol et %d de près, %d disparue(s) dont %d récoltée(s), %d nom(s) ignoré(s)",
 		blind and "survol (balayage aveugle)" or "balayage et survol", stats.passes, stats.aborted,
 		stats.lastAbort and (" (dernier : " .. stats.lastAbort .. ")") or "", nodeCount, stats.found, stats.hovered,
-		stats.gone, stats.gathered, unknownCount)
+		stats.near, stats.gone, stats.gathered, unknownCount)
 end
 
 ---------------------------------------------------------------------------

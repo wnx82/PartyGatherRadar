@@ -82,6 +82,13 @@ function GroupSync.GetRosterSize()
 	return count
 end
 
+--- Appelle fn(identité, unité) pour chaque autre membre du groupe (vous exclu).
+function GroupSync.ForEachMember(fn)
+	for name, unit in pairs(roster) do
+		fn(name, unit)
+	end
+end
+
 --- Identités des autres membres du groupe (vous exclu), triées.
 function GroupSync.GetRosterNames()
 	local names = {}

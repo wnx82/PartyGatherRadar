@@ -1,4 +1,4 @@
-# Plan de tests — PartyGatherRadar 0.4.1
+# Plan de tests — PartyGatherRadar 0.6.0
 
 Deux niveaux de tests :
 
@@ -33,6 +33,8 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | Messages invalides | Types, tailles, champs, énumérations, noms avec `|`, incohérences TEST, émetteur hors groupe, canaux interdits, valeurs secrètes |
 | Identité des joueurs | Noms régionaux de Forever (« Prénom Nom-Royaume ») : découverte, écho, PING/PONG, homonymes de prénom, départ, normalisation ; mode classique « Nom-Royaume » |
 | Détection automatique | Tri des noms (herbes, minerais ; quêtes et joueurs ignorés), herbe partagée au bon endroit (≤ 15 m), sans doublon chez le détecteur, deux plantes de même nom séparées, disparition (REMOVE) seulement dans la zone fiable, déplacement (≤ 12 m), rafraîchissement sans flot, réception réactivée, nouveau membre, partage désactivé, noms appris à la récolte, conditions d'arrêt (pistage, combat, souris, option), cohabitation avec la sonde manuelle, statut et diagnostic |
+| Sans souris (0.5.0) | Proximité : herbe de la cible douce partagée (±15 m, puis ±5 m à portée, position remplacée), rafraîchie, sans doublon ; même objet vu de deux côtés : une ressource ; autre objet du même nom : une autre ; herbe cueillie encore ciblée ignorée 60 s (même GUID, ou même nom à portée sans GUID), autre nom signalé ; position précise jamais dégradée ; minerai sans pistage ; cible douce inactive ou réglage coupé : rien lu ; réglages du jeu gardés, rétablis sauf ceux changés par le joueur, différés en combat (aussi après un `/reload` en combat), portée jamais réduite ; PNJ, coffres, noms secrets et combat refusés. Emplacements connus : reçus, gardés après expiration et `/reload`, infobulle, masqués pour une sorte pistée, près d'une détection affichée et 5 min après une récolte, affichés quand les détections sont masquées, remplacés par une détection, emplacement de récolte, réception coupée, fusion jusqu'à 30 m, précision, bornes et ordre de retrait, boucle d'affichage arrêtée, `/pgr spots`, SavedVariables modifiées à la main |
+| Discussion | « Aucun joueur nommé » masqué pour un membre connecté (« Prénom-Nom », prénom seul, casse), affiché hors du groupe, pour un membre déconnecté, réglage ou addon coupé ; un seul filtre après `/reload` ; client anglais ; motif du message (caractères spéciaux, `%1$s`, format absent ou secret) |
 | Interface | Bouton de minicarte (création, position ronde/carrée, déplacement, masquage conservé), fenêtre de réglages (version, membres avec et sans l'addon, mise à jour au départ du groupe, chaque case modifie son réglage, infos des autres masquées puis réaffichées), anglais |
 | Changements de groupe | Départ d'un membre, dissolution du groupe, BYE, /reload, membre sans addon, raid |
 | Séparation simulé / réel | Magasins séparés, mélanges refusés, pas de fusion TEST/réel, sonde de calibration en TEST uniquement |
@@ -52,6 +54,8 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | 2026-11-04 | Lua 5.1 embarqué (lupa) | 124 réussis, 0 échec (0.3.2) |
 | 2026-11-08 | Lua 5.1 embarqué (lupa) | 139 réussis, 0 échec (0.4.0) |
 | 2026-11-08 | Lua 5.1 embarqué (lupa) | 142 réussis, 0 échec (0.4.1) |
+| 2026-11-09 | Lua 5.1 embarqué (lupa) | 165 réussis, 0 échec (0.5.0) |
+| 2026-11-09 | Lua 5.1 embarqué (lupa) | 173 réussis, 0 échec (0.6.0) |
 
 ## 2. Tests en jeu
 
@@ -155,9 +159,9 @@ vérifient l'alignement avec le marqueur TEST de `/pgr test`.
 | Étape | Résultat attendu | Statut |
 |---|---|---|
 | Connexion | Bouton (icône de fleur) sur le bord de la minicarte, en bas à gauche | Non exécuté |
-| Survol du bouton | Infobulle : « PartyGatherRadar 0.4.1 », membres du groupe et nombre avec l'addon | Non exécuté |
+| Survol du bouton | Infobulle : « PartyGatherRadar 0.5.0 », membres du groupe et nombre avec l'addon | Non exécuté |
 | Glisser le bouton, `/reload` | Le bouton suit le bord de la minicarte et garde sa place après `/reload` | Non exécuté |
-| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.4.1 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
+| Clic sur le bouton (ou `/pgr`) | Fenêtre : version, liste des membres (« PartyGatherRadar 0.5.0 » en vert, « sans addon détecté » en gris), cases à cocher ; Échap la ferme | Non exécuté |
 | Aedot `/pgr test`, Aekiss décoche « Afficher les infos des autres joueurs » | Le marqueur TEST d'Aedot disparaît de la minicarte d'Aekiss, puis revient quand la case est recochée | Non exécuté |
 | Décocher « Bouton autour de la minicarte » | Bouton masqué ; `/pgr` rouvre la fenêtre ; `/pgr button on` le réaffiche | Non exécuté |
 
@@ -193,6 +197,47 @@ montre des plantes détectées par Aekiss et reçues avant cette restriction. Pr
 | `/reload` chez Aekiss | Rappel unique « ce client bloque le balayage » ; mode survol conservé | Non exécuté |
 | Position : capture des deux minicartes, plante survolée chez Aekiss | Icône d'Aedot à moins de ~15 m du point natif | Non exécuté |
 | Après l'essai : `/pgr diag` puis `/reload` chez les deux | `lastReport` : `detection.minimapProbeApi` « restreinte par le client », `detection.auto` (mode, trouvées dont au survol) ; `PartyGatherRadarDB.probe.blindBuild` = build du client | Partiel (2026-11-08) : `blindBuild = "70862"` ; `/pgr diag` lancé avant le survol seulement |
+
+### Scénario 12 — Sans souris : proximité et emplacements connus (0.5.0)
+
+Contexte : sur le client live (build 70862), lire la minicarte sans survol est impossible. La 0.5.0 lit
+la cible d'interaction douce du jeu (constat tiers : ForeverLootSparkles, RareScanner) et garde les
+emplacements déjà vus. Les deux joueurs installent la 0.5.0 et activent `/pgr debug`.
+
+| Étape | Résultat attendu | Statut |
+|---|---|---|
+| Aekiss : `/pgr near on` hors combat | « détection de proximité activée … » ; `/pgr status` : « ciblage doux du jeu oui » ; `PartyGatherRadarDB.proximityCVars` contient les valeurs d'origine | Partiel (2026-11-09) : réglage actif sur les deux clients ; `proximityCVars` vide, les réglages du jeu avaient déjà les valeurs voulues |
+| Aekiss s'approche d'une plante à moins de 15 m, sans souris sur la minicarte | Journal d'Aekiss : « herbe : … (proximité) » ; chez Aedot : icône verte dans les 15 m de la plante | Partiel (2026-11-09) : Doulourante et Aciérite sauvage partagées à ±5 m (emplacement reçu chez Aedot) ; ces plantes avaient d'abord été survolées, l'icône d'Aedot due à la seule proximité n'est pas confirmée |
+| Aekiss va jusqu'à la plante (portée d'interaction) | Position d'Aedot affinée (infobulle : précision ±5 m) ; journal d'Aekiss : « ciblé à environ N m » (N ≤ 15 attendu, à rapporter) | Réussi (2026-11-09) : « ciblé à environ 8 m » et « 4 m » ; emplacement reçu chez Aedot à ±5 m |
+| Aekiss sans Découverte d'herbes, même essai | Plante partagée quand même | Réussi (2026-11-09) avec Aedot, sans pistage : Aciérite sauvage vue de près, reçue par Aekiss |
+| Aekiss cueille une plante ciblée de près | Pas de nouvelle annonce juste après ; journal : « proximité : … ignorée, cueillie à l'instant » ; chez Aedot, l'emplacement reste masqué 5 min | Non exécuté (le 2026-11-09, avant correctif : plante revue 0,3 s après la cueillette et renvoyée) |
+| Aekiss près d'un coffre ou d'une boîte aux lettres | Rien n'est partagé | Non exécuté |
+| Si rien n'est partagé : journal d'Aekiss | Ligne « proximité : objet ciblé sans nom lisible (…) » ou aucune ligne (à rapporter avec `/pgr diag` : sondes `UnitGUID`, `UnitIsInInteractRange`, `C_CVar.SetCVar`) | Non exécuté |
+| Aekiss entre en combat puis tape `/pgr near off` | « en combat : … à la fin du combat » ; après le combat, réglages d'origine rétablis | Non exécuté |
+| Aedot, 5 min après une détection, au même endroit | Icône discrète ; infobulle « Emplacement connu », dernière vue, « présence actuelle non confirmée » | Non exécuté |
+| Aedot : `/reload`, puis `/pgr spots` | Icône toujours là ; nombre d'emplacements sur cette carte et en tout | Non exécuté |
+| Aekiss (pistage des herbes actif) au même endroit | Pas d'icône d'emplacement connu pour les herbes (points natifs) | Non exécuté |
+| Aedot groupé avec un joueur qui utilise ForeverGuide | Plus de « Aucun joueur nommé '<membre>' » dans la discussion ; `/pgr quiet off` les fait revenir ; `/pgr diag` : compteur `hiddenNotFound` | Non exécuté |
+| Un joueur sans pistage actif cueille ou mine, puis `/pgr spots` | Un emplacement de plus ; journal : « emplacement de récolte : … » ; pas d'icône à cet endroit pendant 5 min | Non exécuté |
+
+### Scénario 13 — Points d'apparition de QuestieDB (0.6.0)
+
+Contexte : Questie (et donc QuestieDB) est installé chez Aedot. Aedot ne piste rien ; Aekiss piste les
+herbes. Les deux installent la 0.6.0 et activent `/pgr debug`.
+
+| Étape | Résultat attendu | Statut |
+|---|---|---|
+| Aedot : `/pgr status` avant tout réglage | « … affichés : non » (désactivés par défaut) ; aucune icône pâle de point d'apparition | Non exécuté |
+| Aedot : `/pgr spawns on`, puis `/pgr status` hors combat | « points d'apparition (QuestieDB) : disponibles, N sur cette carte ; affichés : oui » ; journal : « carte … : N point(s) d'apparition (QuestieDB) » | Non exécuté |
+| Aedot regarde sa minicarte (Elwynn, Loch Modan ou Bois de la Pénombre) | Petites icônes pâles là où poussent herbes et filons, sans survol ni détection | Non exécuté |
+| Aedot survole une icône | Nom (en français si QuestieDB le fournit), « Point d'apparition possible », distance, « présence actuelle non confirmée » | Non exécuté |
+| Aedot marche jusqu'à une icône | Une plante ou un filon est souvent là ; sinon déjà cueilli ou pas encore repoussé (à rapporter : écart en mètres) | Non exécuté |
+| Aekiss (pistage des herbes) | Pas d'icône de point d'apparition pour les herbes, seulement pour les filons | Non exécuté |
+| Aekiss partage une herbe (survol ou proximité) | Chez Aedot, l'icône verte remplace le point d'apparition voisin | Non exécuté |
+| Aedot : `/pgr spawns off`, puis `on` | Icônes masquées, puis réaffichées | Non exécuté |
+| Mulgore, Maleterres de l'Est, Les Carmines ou Hurlevent | Icônes sur les vraies ressources (QuestieDB décrit ces zones comme redessinées) : à rapporter | Non exécuté |
+| Changement de zone, combat, `/reload` | Pas de saccade visible ; pas d'erreur Lua (`/pgr diag`) | Non exécuté |
+| Sans Questie | `/pgr status` : « QuestieDB absent » ; rien d'autre ne change | Non exécuté |
 
 ### Scénarios complémentaires
 
