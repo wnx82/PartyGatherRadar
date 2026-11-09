@@ -57,11 +57,20 @@ local function OnNode(sender, message)
 		ns.Diagnostics.Reject("marker_" .. tostring(action), sender)
 		return
 	end
+	-- herbe ou filon détecté par un membre : l'endroit devient un emplacement connu (jamais un marqueur TEST)
+	if message.source == "LIVE" and message.state ~= "GONE" then
+		ns.KnownSpots.Record(message.kind, message.name, message.uiMapID, message.x, message.y, message.accuracy, false)
+	end
 	ns.Diagnostics.Log("RECV", "NODE %s de %s : %s (%s)", message.source, sender, tostring(message.name), action)
 	ns.Fire("PGR_MARKERS_CHANGED")
 end
 
 local function OnRemove(sender, message)
+	-- ressource récoltée : son emplacement connu n'est pas montré tout de suite à la place de la détection
+	local marker = message.reason == "GATHERED" and ns.MarkerManager.Get(sender, message.id, false)
+	if marker and marker.source == "LIVE" then
+		ns.KnownSpots.MarkGathered(marker.kind, marker.uiMapID, marker.x, marker.y, marker.accuracy)
+	end
 	local touched = ns.MarkerManager.Remove(sender, message.id, false)
 		or ns.MarkerManager.Remove(sender, message.id, true)
 	if touched then

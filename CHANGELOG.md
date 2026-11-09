@@ -4,6 +4,102 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 [SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` et
 `PartyGatherRadar_Forever.toc` (`## Version`, fichiers identiques) et `Core/Init.lua` (`ns.VERSION`).
 
+## [0.5.0] - 2026-11-09
+
+### Contexte
+
+Avec la 0.4.1 sur le client live (build 70862), Aedot ne voit une plante qu'après le survol de la
+minicarte d'Aekiss à la souris. Le client ne nomme un point de la minicarte que sous le vrai curseur, et
+aucune API ne liste les points : lire la minicarte sans survol reste impossible. Déplacer le curseur par
+programme ou utiliser un outil externe enfreindrait les principes de l'addon (aucune automatisation).
+Cette version ajoute deux sources légitimes, sans souris.
+
+### Ajouté
+
+- Détection de proximité, sans souris (réglage « Détection de proximité », `/pgr near on|off`, désactivé
+  par défaut) : l'addon lit la cible d'interaction douce du jeu (unité `softinteract`, celle de la touche
+  d'interaction). Quand c'est une herbe ou un filon reconnu, il est partagé avec le groupe à la position du
+  joueur : à ±5 m s'il est à portée d'interaction, sinon à ±15 m. Le pistage n'est pas nécessaire.
+  - Activer le réglage règle le ciblage doux du jeu : `SoftTargetInteract` 3, `SoftTargetInteractArc` 2,
+    `SoftTargetInteractOnlyInRange` 0, `SoftTargetInteractRange` au moins 15. La portée n'est jamais
+    réduite.
+  - Les valeurs d'origine sont gardées (`PartyGatherRadarDB.proximityCVars`). `/pgr near off` les rétablit,
+    sauf celles que le joueur ou un autre addon a changées entre-temps.
+  - Rien n'est changé en combat : l'action est appliquée à la fin du combat. Un rétablissement interrompu
+    par un `/reload` ou une déconnexion en combat est repris à l'entrée suivante dans le monde.
+  - La cible douce n'est lue que si le réglage est actif, même quand le joueur l'a activée lui-même.
+  - Le GUID de la cible identifie l'objet : vu de deux côtés, il reste une seule ressource ; deux objets du
+    même nom tout proches ne sont jamais fusionnés.
+  - Une vue à portée d'interaction remplace une position moins précise ; une vue lointaine ne déplace pas
+    une position plus précise (survol ou récolte).
+  - Le journal note la distance de ciblage (distance parcourue jusqu'à la portée d'interaction), pour
+    vérifier en jeu la limite d'environ 15 m.
+  - Une herbe cueillie que la cible douce désigne encore, le temps qu'elle disparaisse, n'est pas signalée
+    de nouveau pendant 60 s : même objet (GUID), ou même nom à portée de l'endroit de la cueillette.
+    Constaté en jeu : revue 0,3 s après la cueillette, elle réapparaissait chez les autres et son
+    emplacement perdait la marque « récolté ».
+  - Aucune touche n'est liée. L'addon ne cible, ne déplace et ne récolte rien.
+- Emplacements connus : chaque herbe ou filon vu (balayage, survol, proximité, récolte, ou reçu du groupe)
+  est gardé par carte dans `PartyGatherRadarDB.knownSpots`.
+  - Fusion à 15 m pour une même sorte, ou jusqu'à la somme des deux précisions (au plus 30 m : une herbe vue
+    à ±15 m de deux côtés). La position la plus précise est gardée. Au plus 300 par carte et 3000 en tout ;
+    les plus anciens sont retirés, ceux reçus du groupe avant ceux vus par le joueur.
+  - Une ressource récoltée (par le joueur, ou retirée par un membre) n'affiche pas son emplacement pendant
+    5 min. Une nouvelle vue lève ce délai.
+  - Affichés sur la minicarte comme des positions historiques (icône discrète). L'infobulle montre
+    « Emplacement connu », la date de dernière vue, le nombre de fois vu et l'avertissement « présence
+    actuelle non confirmée ».
+  - Cachés près d'une détection récente de la même sorte (20 m), pour une sorte que ce personnage piste
+    déjà (points natifs), et, s'ils viennent d'un autre joueur, quand la réception est coupée.
+  - Ils restent après `/reload`, après l'expiration des détections et après `/pgr clear`.
+  - Case « Emplacements connus » dans la fenêtre de réglages (réglage `showHistory`).
+  - `/pgr spots` donne le nombre d'emplacements ; `/pgr spots clear` les efface tous.
+- Une récolte (herbe ou filon) ajoute un emplacement connu à la position du joueur, à ±5 m, même sans
+  pistage.
+- Discussion : le message « Aucun joueur nommé '…' ne joue actuellement » est masqué quand il vise un membre
+  du groupe connecté (réglage « Masquer “Aucun joueur nommé …” », `/pgr quiet on|off`, activé par défaut). Ce
+  message vient d'un autre addon, qui chuchote un membre sous la forme « Prénom-Nom » ; le serveur le lit
+  comme un nom sur un autre royaume. Constaté avec ForeverGuide 1.39.5 (préfixe `FGD`), qui inondait la
+  discussion. PartyGatherRadar n'envoie jamais de chuchotement. Seul l'affichage change : les envois de
+  l'autre addon continuent, et un joueur hors du groupe ou un membre déconnecté garde son message.
+- `/pgr status` : lignes « détection de proximité » et « emplacements connus ».
+- `/pgr diag` : sondes `UnitGUID`, `UnitIsInInteractRange` et `C_CVar.SetCVar`.
+- Boucle d'affichage de la minicarte : arrêtée quand aucun marqueur ni emplacement connu de la carte courante
+  n'est affichable ; relancée par un changement de zone, de pistage ou de réglage.
+- 23 tests hors jeu (165 au total) : proximité partagée et rafraîchie, précision gardée puis remplacée à
+  portée, même objet vu de deux côtés, herbe cueillie encore ciblée (même GUID, ou même nom sans GUID),
+  minerai sans pistage, réglages du jeu gardés, rétablis (aussi après
+  un `/reload` en combat), combat, cibles refusées (PNJ, coffre, nom secret), emplacements reçus, affichés
+  et gardés après `/reload`, masqués après une récolte, affichés quand les détections sont masquées,
+  emplacement de récolte, fusion, bornes et ordre de retrait, boucle d'affichage arrêtée, SavedVariables
+  modifiées à la main, message « joueur introuvable » masqué seulement pour un membre connecté (français,
+  anglais, motif du message).
+
+### Modifié
+
+- L'avertissement « balayage aveugle » et son rappel proposent `/pgr near on` et citent les emplacements
+  connus.
+
+### Vérifié en jeu (2026-11-09, build 70862, deux clients, SavedVariables des deux joueurs)
+
+- Lecture de la cible douce sur des herbes de Forever : GUID « GameObject-… » et nom lisibles. Doulourante et
+  Aciérite sauvage partagées à ±5 m sans survol.
+- Distance de ciblage : « ciblé à environ 8 m » et « 4 m » avant la portée d'interaction, soit environ 4 à
+  13 m de la plante. La proximité ne voit donc que la plante toute proche : elle ne remplace pas le survol
+  pour les plantes lointaines de la minicarte.
+- Sans pistage : Aedot, sans Découverte d'herbes, a partagé une Aciérite sauvage vue de près, reçue par
+  Aekiss.
+- Emplacements reçus gardés dans les SavedVariables d'Aedot, marqués récoltés 3 s après la cueillette
+  d'Aekiss.
+
+### Non vérifié en jeu
+
+- Effet des réglages du jeu posés par l'addon : sur les deux clients, ils avaient déjà les valeurs voulues
+  (`proximityCVars` vide).
+- Herbe cueillie encore ciblée, ignorée 60 s (correctif fait après l'essai en jeu).
+- Affichage et infobulle des emplacements connus.
+- Masquage de « Aucun joueur nommé … » avec ForeverGuide.
+
 ## [0.4.1] - 2026-11-08
 
 ### Contexte

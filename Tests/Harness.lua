@@ -215,7 +215,8 @@ local KNOWN_EVENTS = {
 	ADDON_LOADED = true, PLAYER_LOGIN = true, PLAYER_ENTERING_WORLD = true, CHAT_MSG_ADDON = true,
 	GROUP_ROSTER_UPDATE = true, GROUP_JOINED = true, GROUP_LEFT = true, MINIMAP_UPDATE_ZOOM = true,
 	ZONE_CHANGED_NEW_AREA = true, CVAR_UPDATE = true, ADDON_RESTRICTION_STATE_CHANGED = true,
-	UNIT_SPELLCAST_SENT = true, UNIT_SPELLCAST_SUCCEEDED = true,
+	UNIT_SPELLCAST_SENT = true, UNIT_SPELLCAST_SUCCEEDED = true, PLAYER_SOFT_INTERACT_CHANGED = true,
+	ZONE_CHANGED = true, ZONE_CHANGED_INDOORS = true, MINIMAP_UPDATE_TRACKING = true,
 }
 
 local ALLOWED_GLOBALS = { SLASH_PARTYGATHERRADAR1 = true, PartyGatherRadarDB = true }
@@ -240,10 +241,16 @@ function World:NewClient(opts)
 	client.x, client.y = opts.x or 0.5, opts.y or 0.5
 	client.inInstance = opts.inInstance or false
 	client.build = opts.build or "70374" -- numéro de build renvoyé par GetBuildInfo
-	client.cvars = { rotateMinimap = "0" }
+	-- ciblage doux : valeurs de départ simulées (manette seulement, devant le joueur, à portée d'interaction)
+	client.cvars = { rotateMinimap = "0", SoftTargetInteract = "1", SoftTargetInteractArc = "0",
+		SoftTargetInteractOnlyInRange = "1", SoftTargetInteractRange = "10" }
+	-- cible d'interaction douce choisie par le jeu : { name, guid, inReach } ; elle n'existe que si le ciblage doux
+	-- est actif au clavier (SoftTargetInteract 2 ou 3)
+	client.softTarget = nil
 	client.facing = 0
 	client.savedVariables = nil
 	client.chat = {}
+	client.chatFilters = {}
 	client.sent = {}
 	client.sendResult = nil -- code forcé renvoyé par SendAddonMessage (tests de refus)
 	client.blips = {}       -- points de minicarte simulés : { name, dx, dy } (unités du cadre)
@@ -269,6 +276,23 @@ function Client:FireEvent(event, ...)
 			frame.scripts.OnEvent(frame, event, ...)
 		end
 	end
+end
+
+--- Cible d'interaction douce vue par le jeu, ou nil si le ciblage doux est inactif au clavier.
+function Client:SoftTarget()
+	local mode = self.cvars.SoftTargetInteract
+	if mode ~= "2" and mode ~= "3" then
+		return nil
+	end
+	return self.softTarget
+end
+
+--- Change la cible douce (nil : aucune) et déclenche PLAYER_SOFT_INTERACT_CHANGED.
+function Client:SetSoftTarget(target)
+	local old = self:SoftTarget()
+	self.softTarget = target
+	local new = self:SoftTarget()
+	self:FireEvent("PLAYER_SOFT_INTERACT_CHANGED", old and old.guid or nil, new and new.guid or nil)
 end
 
 function Client:RunTimers()
@@ -301,6 +325,18 @@ function Client:RunOnUpdate(dt)
 			script(frame, dt)
 		end
 	end
+end
+
+--- Message système du serveur (CHAT_MSG_SYSTEM) : passe par les filtres de la discussion. Renvoie true s'il est
+--- affiché (ajouté à client.chat), false s'il est masqué.
+function Client:SystemMessage(text)
+	for _, fn in ipairs(self.chatFilters.CHAT_MSG_SYSTEM or {}) do
+		if fn(nil, "CHAT_MSG_SYSTEM", text) then
+			return false
+		end
+	end
+	self.chat[#self.chat + 1] = text
+	return true
 end
 
 function Client:ChatContains(pattern)
@@ -435,6 +471,8 @@ local function BuildEnvironment(client)
 	api.UISpecialFrames = {}
 
 	api.GetTime = function() return world.time end
+	-- heure murale : suit l'horloge simulée (une /reload ou une nouvelle session la conserve)
+	api.time = function() return 1800000000 + math.floor(world.time) end
 	api.GetLocale = function() return client.locale end
 	api.GetBuildInfo = function() return "1.60.1", client.build, "Oct 12 2026", 16001, "", " " end
 	api.WOW_PROJECT_ID = 18
@@ -456,7 +494,17 @@ local function BuildEnvironment(client)
 	api.IsIndoors = function() return false end
 	api.GetPlayerFacing = function() return client.facing end
 	api.GetCursorPosition = function() return client.cursorX, client.cursorY end
-	api.C_CVar = { GetCVar = function(name) return client.cvars[name] end }
+	api.C_CVar = {
+		GetCVar = function(name) return client.cvars[name] end,
+		SetCVar = function(name, value)
+			if client.cvars[name] == nil then
+				return false
+			end
+			client.cvars[name] = tostring(value)
+			client.cvarWrites = (client.cvarWrites or 0) + 1
+			return true
+		end,
+	}
 	api.CreateVector2D = NewVector
 
 	api.Enum = {
@@ -529,7 +577,47 @@ local function BuildEnvironment(client)
 		end
 		return target.name, target.realm ~= client.realm and target.realm or nil
 	end
+	-- cible douce : un objet du monde n'est pas une unité (UnitExists faux) mais a un nom et un GUID
+	local unitName = api.UnitName
+	api.UnitName = function(unit)
+		if unit == "softinteract" then
+			local target = client:SoftTarget()
+			if target and target.secret then
+				return H.SECRET
+			end
+			return target and target.name or nil
+		end
+		return unitName(unit)
+	end
+	api.UnitGUID = function(unit)
+		if unit == "softinteract" then
+			local target = client:SoftTarget()
+			return target and target.guid or nil
+		end
+		if unit == "player" then
+			return "Player-1-" .. client.name
+		end
+		return nil
+	end
+	api.UnitIsInInteractRange = function(unit)
+		local target = unit == "softinteract" and client:SoftTarget()
+		return target and target.inReach == true or false
+	end
 	api.UnitExists = function(unit) return unit == "player" or client:UnitClient(unit) ~= nil end
+	api.UnitIsConnected = function(unit)
+		local other = client:UnitClient(unit)
+		return other ~= nil and not other.offline
+	end
+
+	-- discussion : filtres des messages (ChatFrameUtil) et message système « joueur introuvable »
+	api.ERR_CHAT_PLAYER_NOT_FOUND_S = client.locale == "frFR" and "Aucun joueur nommé '%s' ne joue actuellement."
+		or "No player named '%s' is currently playing."
+	api.ChatFrameUtil = {
+		AddMessageEventFilter = function(event, fn)
+			client.chatFilters[event] = client.chatFilters[event] or {}
+			table.insert(client.chatFilters[event], fn)
+		end,
+	}
 	api.IsInGroup = function(category)
 		if category == 2 then
 			return false
@@ -721,6 +809,7 @@ end
 --- Charge l'addon (fichiers du TOC dans l'ordre) puis simule ADDON_LOADED, PLAYER_LOGIN et PLAYER_ENTERING_WORLD.
 function Client:Login(isReload)
 	self.prefixes = {}
+	self.chatFilters = {} -- l'interface est rechargée avec l'addon
 	self.globalsWritten = {}
 	self.env = BuildEnvironment(self)
 	if self.savedVariables then

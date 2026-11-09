@@ -5,7 +5,7 @@
 local addonName, ns = ...
 
 ns.ADDON_NAME = addonName or "PartyGatherRadar"
-ns.VERSION = "0.4.1"
+ns.VERSION = "0.5.0"
 ns.PREFIX = "PGRadar"            -- préfixe des messages d'addon (16 caractères maximum)
 ns.TARGET_INTERFACE = 16001       -- interface WoW Forever ciblée (bêta puis live 1.60.1)
 ns.TARGET_BUILD = "1.60.1"
@@ -26,6 +26,15 @@ function ns.Now()
 		return GetTime()
 	end
 	return os.clock()
+end
+
+--- Heure murale en secondes (time() du client) : sert aux données gardées d'une session à l'autre.
+--- Les tests hors jeu fournissent time().
+function ns.Epoch()
+	if time then
+		return time()
+	end
+	return os.time()
 end
 
 ---------------------------------------------------------------------------
@@ -60,6 +69,16 @@ function ns.GetCVar(name)
 		return GetCVar(name)
 	end
 	return nil
+end
+
+--- Modifie une variable de configuration du client. Renvoie true si le client l'accepte.
+function ns.SetCVar(name, value)
+	local setter = (C_CVar and C_CVar.SetCVar) or SetCVar
+	if not setter then
+		return false
+	end
+	local ok, result = pcall(setter, name, tostring(value))
+	return ok and result ~= false
 end
 
 ---------------------------------------------------------------------------

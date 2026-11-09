@@ -1,6 +1,6 @@
 # PartyGatherRadar — Faisabilité et limitations techniques
 
-Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-11-08 pour la version 0.4.1.
+Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-11-09 pour la version 0.5.0.
 
 Légende des niveaux de confiance :
 
@@ -20,6 +20,10 @@ Légende des niveaux de confiance :
 > balayage de la minicarte ne lit plus rien, sans erreur (constat publié par NaowhForever_Professions
 > 1.2.17, qui a retiré sa fonction équivalente ; Constaté (tiers), puis **constaté en jeu** par ce projet
 > le 2026-11-08, build 70862). La 0.4.0 s'y adapte seule : détection au survol, voir § 3.A.
+>
+> **Sans souris (0.5.0).** Lire la minicarte sans survol reste impossible. La 0.5.0 ajoute deux sources
+> légitimes : la cible d'interaction douce du jeu (détection de proximité, environ 15 m) et les
+> emplacements connus (herbes et filons déjà vus, gardés d'une session à l'autre). Voir § 3.A.
 
 ## 1. Client ciblé
 
@@ -42,6 +46,8 @@ PartyGatherRadar identifie Forever par le numéro d'interface (16000 à 19999) e
 | **A. Énumérer les points de pistage de la minicarte** | **Impossible** | Aucune API : les 23 fonctions `C_Minimap` n'en listent aucun ; l'événement `MINIMAP_UPDATE_TOOLTIP` n'existe pas | Confirmé (doc) |
 | **A. Lire le nom d'un point sous un survol** | Possible | `C_TooltipInfo.GetMinimapMouseover()` (données de l'infobulle native) ; sous le vrai curseur : **détection au survol** (0.4.0) | Confirmé (doc) ; **vérifié en jeu** par le balayage (2026-10-15) ; **survol vérifié en jeu** (2026-11-08, build 70862 : lecture et réception par le groupe) |
 | **A. Sonder la minicarte sans bouger la souris** | **Bloqué depuis novembre 2026** | `Minimap:SetUsingSoftCursor(bool)` + `Minimap:UpdateMouseoverAtPoint(x, y)` : fonctions **propres à la branche Forever** | Confirmé (doc) ; **vérifié en jeu** (2026-10-15, 293 points sans erreur ; plantes partagées dans le journal du client live) ; depuis la mise à jour de novembre 2026, ne nomme plus qu'un point sous le vrai curseur (Constaté (tiers)) |
+| **A. Détecter une ressource proche sans souris** | Possible, portée limitée | Cible d'interaction douce du jeu (unité `softinteract`, `PLAYER_SOFT_INTERACT_CHANGED`) : GUID « GameObject-… », `UnitName`, `UnitIsInInteractRange` ; réglages `SoftTargetInteract*` posés par l'addon (0.5.0, opt-in) | **Vérifié en jeu** (2026-11-09) : herbes lues et partagées, premières vues à environ 4 à 13 m ; limite d'environ 15 m constatée par un tiers (ForeverLootSparkles) |
+| A. Emplacements déjà vus | Possible | Positions gardées dans les SavedVariables, affichées comme positions historiques (0.5.0) | Testé hors jeu ; non vérifié en jeu |
 | A. Position d'un point détecté | Approximative | Grille de sondage → décalage en unités de minicarte → mètres (`C_Minimap.GetViewRadius`) → coordonnées de carte | Calcul testé hors jeu ; en jeu, joueurs retrouvés à 0,3 m et 8 m (près du centre) ; échelle à distance non vérifiée |
 | A. Identifiant de ressource | Indisponible | L'infobulle ne donne que des noms localisés | Confirmé (doc : données d'infobulle) |
 | A. Type herbe / minerai | Indirect | Table de noms (français, anglais, sans accents), forme des noms de gisements, noms appris à la récolte (`Detection/ResourceNames.lua`) | Testé hors jeu ; « Pacifique » et « Eglantine » vus en jeu |
@@ -131,6 +137,60 @@ détection au survol, choisi automatiquement (§ 3.A).
   - **restrictions d'addons** (`C_RestrictedActions.IsAddOnRestrictionActive` : combat, rencontre, mode
     défi, JcJ, carte) : ni balayage ni lecture au survol pendant qu'elles sont actives.
 
+- **Détection de proximité (0.5.0, réglage `proximityDetect`, désactivé par défaut)** :
+  - la cible d'interaction douce du jeu (unité `softinteract`, celle de la touche d'interaction) désigne
+    l'objet le plus proche. Un objet du monde n'est pas une unité (`UnitExists` faux) mais a un GUID
+    « GameObject-… » et un nom (`UnitName`) ; `UnitIsInInteractRange` dit s'il est à portée. Constaté
+    (tiers) : ForeverLootSparkles 1.3.1 et RareScanner lisent cette cible sur Forever ;
+  - lecture toutes les 0,5 s et à `PLAYER_SOFT_INTERACT_CHANGED`, jamais en combat ni pendant une
+    restriction d'addons. Le nom est trié comme au survol (`Detection/ResourceNames.lua`) : coffres,
+    boîtes aux lettres et objets de quête ne sont jamais partagés. Un nom secret est ignoré ;
+  - lecture seulement quand le réglage est actif, même si le joueur a activé la cible douce lui-même ;
+  - position : celle du joueur, à ±5 m si l'objet est à portée d'interaction, sinon ±15 m. Une vue à
+    portée remplace une position moins précise ; une vue lointaine ne déplace jamais une position plus
+    précise. La même cible est confirmée toutes les 5 s ; le renvoi au groupe suit l'espacement habituel
+    (25 s) ;
+  - le GUID identifie l'objet : vu de deux côtés opposés (jusqu'à 30 m d'écart entre les deux positions du
+    joueur), il reste une seule ressource ; deux objets du même nom tout proches ne sont jamais fusionnés.
+    Deux joueurs qui voient le même objet produisent encore deux détections (pas de GUID dans le
+    protocole) ;
+  - le pistage n'est pas nécessaire : un joueur sans Découverte d'herbes partage aussi ce qu'il approche ;
+  - réglages du jeu : `SoftTargetInteract` 3, `SoftTargetInteractArc` 2, `SoftTargetInteractOnlyInRange`
+    0, `SoftTargetInteractRange` au moins 15 (jamais réduit). Les valeurs d'origine sont gardées dans
+    `PartyGatherRadarDB.proximityCVars` ; `/pgr near off` rétablit celles que personne n'a changées
+    entre-temps. En combat, l'action attend la fin du combat ;
+  - **limite** : ForeverLootSparkles 1.3.1 demande 60 m et note que Forever lâche la cible au-delà
+    d'environ 15 m (Constaté (tiers)). La précision annoncée (±15 m) en dépend. Pour la vérifier, le
+    journal note « ciblé à environ N m » : la distance parcourue entre la première vue d'un objet et
+    l'arrivée à portée d'interaction (à 5 m près). Une seule cible à la fois : celle que le jeu
+    choisit, en général l'objet le plus proche. Effets visibles en jeu des réglages non vérifiés ;
+  - **vérifié en jeu le 2026-11-09** (build 70862, deux clients) : GUID et nom des herbes lisibles ;
+    « ciblé à environ 8 m » puis « 4 m » avant la portée d'interaction, soit environ 4 à 13 m de la
+    plante ; Aedot, sans pistage, a partagé une herbe vue de près. Les réglages du jeu avaient déjà les
+    valeurs voulues sur les deux clients (`proximityCVars` vide). Conséquence : la proximité ne voit que la
+    plante toute proche, et ne remplace pas le survol pour les plantes lointaines de la minicarte ;
+  - une herbe cueillie reste ciblée le temps de disparaître (constaté en jeu : revue 0,3 s après). Elle
+    n'est pas signalée de nouveau pendant 60 s (`AutoDetect.GATHERED_IGNORE_SECONDS`) : même GUID, ou, sans
+    GUID connu des deux côtés, même nom à portée de l'endroit de la cueillette. Non vérifié en jeu ;
+  - aucune touche n'est liée ; l'addon ne cible, ne déplace et ne récolte rien.
+- **Emplacements connus (0.5.0)** :
+  - chaque herbe ou filon détecté par le joueur (balayage, survol, proximité), récolté (à ±5 m, même sans
+    pistage) ou reçu du groupe (détection récente) est gardé par carte dans
+    `PartyGatherRadarDB.knownSpots` : position, sorte, nom, précision, date (`time()`), nombre de vues ;
+  - fusion à 15 m pour une même sorte, ou jusqu'à la somme des deux précisions (au plus 30 m) ; la position
+    la plus précise est gardée ; au plus 300 par carte et 3000 en tout, les plus anciens retirés, ceux reçus
+    du groupe avant ceux vus par le joueur ; données validées au chargement ;
+  - une ressource récoltée par le joueur, ou retirée par un membre (`REMOVE` GATHERED), n'affiche pas son
+    emplacement pendant 5 min (temps de repousse inconnu : simple délai) ; une nouvelle vue lève ce délai ;
+  - affichés sur la minicarte comme des positions historiques (icône discrète, infobulle « Emplacement
+    connu », « présence actuelle non confirmée »). Cachés près d'une détection récente de la même sorte
+    (20 m) affichée ou faite par le joueur, pour une sorte que le personnage piste (les points natifs
+    suffisent), et, s'ils viennent d'un autre joueur, quand la réception est coupée ;
+  - la boucle d'affichage (10 Hz) ne tourne que s'il existe des marqueurs, ou des emplacements connus
+    affichables sur la carte courante ;
+  - une ressource peut avoir été récoltée par un autre joueur ou ne pas être réapparue : un emplacement
+    connu n'est jamais présenté comme une détection.
+
 ### B. Communication
 
 - Préfixe `PGRadar` (7 caractères ≤ 16), inscrit au chargement (inscription perdue à chaque /reload,
@@ -149,6 +209,12 @@ détection au survol, choisi automatiquement (§ 3.A).
   **Vérifié en jeu** (2026-10-15) : il renvoie `true` chez les deux clients alors que les messages PARTY
   passent dans les deux sens.
 - **Comptes d'essai** : depuis la bêta 4 (build 70291), ils ne peuvent plus envoyer de messages d'addon.
+- PartyGatherRadar n'envoie jamais de chuchotement (WHISPER). Des addons qui chuchotent un membre du groupe
+  sous la forme « Prénom-Nom » provoquent « Aucun joueur nommé '…' ne joue actuellement » : sur Forever, le
+  tiret désigne un royaume. Constaté le 2026-11-09 avec ForeverGuide 1.39.5 (préfixe `FGD`, échange direct
+  expérimental), identifié en jeu par un relevé des envois `WHISPER`. La 0.5.0 masque ce message quand il
+  vise un membre du groupe connecté (`ChatFrameUtil.AddMessageEventFilter`, `ERR_CHAT_PLAYER_NOT_FOUND_S`) ;
+  les envois de l'autre addon continuent.
 - Un message « accepté » par l'API n'est **jamais** considéré comme reçu : seule une réponse (PONG,
   HELLO) prouve la réception.
 - Raids : canal RAID (option, activée par défaut, expérimental) ; sans l'option, PARTY ne touche que le
@@ -179,14 +245,16 @@ détection au survol, choisi automatiquement (§ 3.A).
 - Les icônes peuvent recouvrir des points natifs (quêtes) : taille 14 px et transparence 0,9 par défaut,
   réglables.
 
-## 4. Limitations connues de la version 0.4.1
+## 4. Limitations connues de la version 0.5.0
 
 1. Sur le client live restreint (novembre 2026), seule la **détection au survol** fonctionne : une
    ressource n'est partagée que si le joueur passe la souris dessus sur sa minicarte. Elle n'est pas
    déclarée disparue par le balayage : elle expire, sauf une herbe cueillie par le joueur. Un filon miné
    n'est pas retiré (il peut souvent être miné plusieurs fois). Aucune détection sans survol n'est
    possible sur ce client : aucune API ne donne les points de la minicarte, et la sonde ne lit plus que
-   sous le vrai curseur. Le passage automatique en mode survol est vérifié en jeu (2026-11-08) ; la
+   sous le vrai curseur. Sans souris, la 0.5.0 offre seulement la détection de proximité (objet le plus
+   proche ; vérifiée en jeu le 2026-11-09 : plantes vues à environ 4 à 13 m) et les emplacements connus
+   (présence non confirmée). Le passage automatique en mode survol est vérifié en jeu (2026-11-08) ; la
    précision sous le curseur, l'icône chez l'autre client et le retour au balayage ne le sont pas encore.
    Détection par balayage (clients non restreints) : coût en images par seconde et effet sur
    l'infobulle native non mesurés.
@@ -195,8 +263,11 @@ détection au survol, choisi automatiquement (§ 3.A).
    dans le journal (« nom ignoré »). Deux plantes du même nom à moins d'environ 50 m (zoom minimal)
    donnent un seul marqueur. Deux herboristes qui voient la même plante peuvent produire deux
    marqueurs à plus de 5 m l'un de l'autre (fusion limitée à 5 m).
-3. Mode de secours partiel : détection au survol et retrait à la cueillette (0.4.0). Pas encore de
-   positions de récolte partagées ni de marqueurs manuels (phase 2/3).
+3. Mode de secours partiel : détection au survol et retrait à la cueillette (0.4.0), détection de
+   proximité et emplacements connus (0.5.0). Les emplacements connus ne sont pas envoyés au groupe en
+   tant que tels : chacun garde ce qu'il a vu ou reçu en direct. Pas encore de marqueurs manuels
+   (phase 2/3). Comme les détections reçues, un emplacement connu peut recouvrir un point natif d'une
+   autre sorte sur la minicarte d'un joueur qui piste.
 4. Fenêtre de réglages simple (cases à cocher) : taille, couleurs et durées seulement dans
    `PartyGatherRadarDB.settings` (phase 4). Bouton et fenêtre non encore vérifiés en jeu.
 5. Pas d'affichage sur la carte du monde : phase 3.
@@ -229,3 +300,6 @@ détection au survol, choisi automatiquement (§ 3.A).
 - NaowhForever_Professions 1.2.17, `README.md` (installé le 2026-11-08) : « A Forever update in November
   2026 stopped that: the probe now names a node only under the real cursor (#918) ». Lu pour le constat,
   **aucun code copié**.
+- ForeverLootSparkles 1.3.1, `SoftTarget.lua`, et RareScanner, `Core/Service/RSEventHandler.lua`
+  (installés le 2026-11-09) : lecture de la cible `softinteract` et des GUID « GameObject » sur Forever,
+  limite d'environ 15 m. Lus pour le constat, **aucun code copié**.

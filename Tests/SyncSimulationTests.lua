@@ -61,10 +61,10 @@ return function(H, root)
 		H.eq(#peersA, 1)
 		H.eq(peersA[1].name, "Aedot-Realm")
 		H.eq(peersA[1].peer.compatible, true)
-		H.eq(peersA[1].peer.addonVersion, "0.4.1")
+		H.eq(peersA[1].peer.addonVersion, "0.5.0")
 		H.eq(#peersB, 1)
 		H.eq(peersB[1].name, "Aekiss-Realm")
-		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.4.1"), "annonce de découverte")
+		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.5.0"), "annonce de découverte")
 		H.eq(peersA[1].peer.messages, #b.sent, "un message compté une seule fois")
 		H.ok(#a.sent <= 2 and #b.sent <= 2, "au plus un HELLO et une réponse par client")
 		local before = #a.sent + #b.sent
@@ -173,7 +173,13 @@ return function(H, root)
 		H.eq(#VisiblePins(b), 1, "un point incertain reste affiché (en gris)")
 		world:Advance(240)
 		H.eq(b.ns.MarkerManager.Count(), 0, "supprimé après la durée d'incertitude")
-		H.eq(#VisiblePins(b), 0)
+		-- 0.5.0 : l'endroit reste un emplacement connu, affiché en discret (présence non confirmée)
+		local pins = VisiblePins(b)
+		H.eq(#pins, 1, "emplacement connu affiché à la place de la détection")
+		H.ok(pins[1].spot ~= nil and pins[1].status == "HISTORY", "marqueur d'emplacement connu")
+		b.ns.Config.Set("showHistory", false)
+		world:Advance(1.1)
+		H.eq(#VisiblePins(b), 0, "emplacements connus masqués par leur réglage")
 	end)
 
 	H.test("une mise à jour renouvelle la détection", function()
@@ -424,7 +430,7 @@ return function(H, root)
 		local world, a = Grouped()
 		for _, command in ipairs({ "", "help", "status", "version", "diag", "peers", "debug", "debug", "log 5",
 			"clear", "clear log", "probe", "probe tracking", "probe vignettes", "probe minimap", "probe minimap",
-			"minimap off", "minimap on", "inconnue", "off", "on" }) do
+			"minimap off", "minimap on", "spots", "spots clear", "near on", "near off", "quiet off", "quiet on", "inconnue", "off", "on" }) do
 			a:Slash(command)
 			world:Advance(0.1)
 		end
@@ -822,7 +828,7 @@ return function(H, root)
 		local _, a = Grouped()
 		local button = a.ns.MinimapButton.GetFrame()
 		button.scripts.OnEnter(button)
-		H.eq(a.tooltipLines[1], "PartyGatherRadar 0.4.1")
+		H.eq(a.tooltipLines[1], "PartyGatherRadar 0.5.0")
 		H.eq(a.tooltipLines[2], "groupe : 1 autre(s) membre(s), 1 avec PartyGatherRadar")
 		NoErrors(a)
 	end)
@@ -841,10 +847,10 @@ return function(H, root)
 		a:Slash("")
 		H.eq(a.ns.SettingsPanel.IsOpen(), true, "fenêtre ouverte")
 		local version, summary = a.ns.SettingsPanel.GetHeaderTexts()
-		H.eq(version, "version 0.4.1, protocole 1 — client 1.60.1 (build 70374)")
+		H.eq(version, "version 0.5.0, protocole 1 — client 1.60.1 (build 70374)")
 		H.eq(summary, "2 autre(s) membre(s), 1 avec PartyGatherRadar")
 		local texts = a.ns.SettingsPanel.GetMemberTexts()
-		H.ok(Contains(texts, "Aedot Wnx — |cff40ff40PartyGatherRadar 0.4.1|r"), "membre avec l'addon")
+		H.ok(Contains(texts, "Aedot Wnx — |cff40ff40PartyGatherRadar 0.5.0|r"), "membre avec l'addon")
 		H.ok(Contains(texts, "Carl Zed — |cff9d9d9dsans addon détecté|r"), "membre sans l'addon")
 		world:SetGroup({ a })
 		world:Advance(1)
@@ -878,7 +884,8 @@ return function(H, root)
 		local world, a = Grouped()
 		a:Slash("")
 		for _, key in ipairs({ "enabled", "receiveEnabled", "shareEnabled", "showMinimap", "showHerbs", "showOres",
-			"showMinimapButton", "debug" }) do
+			"showMinimapButton", "debug", "autoDetect", "proximityDetect", "showHistory", "showOwnDetections",
+			"hideNotFound" }) do
 			local check = a.ns.SettingsPanel.GetCheckbox(key)
 			H.ok(check, "case " .. key)
 			local before = a.ns.Config.Get(key)
@@ -1626,5 +1633,651 @@ return function(H, root)
 		H.eq(CountSent(a, "N") - before, 1, "après un balayage aveugle : un seul rafraîchissement")
 		NoErrors(a)
 		NoErrors(b)
+	end)
+
+	---------------------------------------------------------------------------
+	H.suite("Sans souris (0.5.0) : détection de proximité et emplacements connus")
+	---------------------------------------------------------------------------
+	-- Proximité : la cible d'interaction douce du jeu (client.softTarget) nomme l'objet le plus proche du joueur ;
+	-- elle n'existe que si le ciblage doux est actif au clavier. Emplacements connus : endroits déjà vus, gardés.
+
+	local objectCounter = 0
+
+	--- Objet ciblé par le ciblage doux du jeu. `guidType` : "GameObject" (défaut) ou "Creature" (PNJ).
+	local function SoftObject(name, inReach, guidType)
+		objectCounter = objectCounter + 1
+		return { name = name, inReach = inReach or false,
+			guid = string.format("%s-0-1-0-1429-1618-%08X", guidType or "GameObject", objectCounter) }
+	end
+
+	local function TooltipHas(client, text)
+		for _, line in ipairs(client.tooltipLines) do
+			if tostring(line):find(text, 1, true) then
+				return true
+			end
+		end
+		return false
+	end
+
+	H.test("proximité, sans souris : une herbe ciblée par le jeu à 8 m d'Aekiss apparaît chez Aedot", function()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		a:Slash("near on")
+		H.eq(a.cvars.SoftTargetInteract, "3", "ciblage doux toujours actif")
+		H.eq(a.cvars.SoftTargetInteractArc, "2", "tout autour du joueur")
+		H.eq(a.cvars.SoftTargetInteractOnlyInRange, "0", "au-delà de la portée d'interaction")
+		H.eq(a.cvars.SoftTargetInteractRange, "15", "portée demandée")
+		H.ok(a:ChatContains("détection de proximité activée"), "message d'activation")
+		local herb = Herb("Pacifique", 8, 0)
+		a:SetSoftTarget(SoftObject("Pacifique"))
+		world:Advance(0.1)
+		local list = Received(b, "Pacifique")
+		H.eq(#list, 1, "partagée sans survol")
+		H.eq(list[1].status, "ACTIVE")
+		local marker = list[1].marker
+		local distance = b.ns.MarkerManager.DistanceYards(ELWYNN, marker.x, marker.y, herb.x, herb.y)
+		H.ok(distance <= 15, string.format("position à %.1f m de la plante", distance))
+		H.eq(marker.accuracy, 15, "précision annoncée : portée de la cible douce")
+		H.eq(CountSent(a, "N"), 1, "une annonce")
+		H.ok(LogContains(a, "herbe : Pacifique") and LogContains(a, "(proximité)"), "découverte journalisée")
+		world:Advance(10)
+		H.eq(CountSent(a, "N"), 1, "même cible : pas de flot")
+		-- à portée d'interaction : position plus précise
+		a.softTarget.inReach = true
+		world:Advance(0.6)
+		H.eq(LocalMarker(a, "Pacifique").accuracy, 5, "à portée : ±5 m")
+		world:Advance(20)
+		H.eq(CountSent(a, "N"), 2, "cible gardée : un rafraîchissement après 25 s (file d'envoi comprise)")
+		H.eq(Received(b, "Pacifique")[1].status, "ACTIVE")
+		a:Slash("status")
+		H.ok(a:ChatContains("réglage oui, ciblage doux du jeu actif, 1 ressource%(s%) vue%(s%) de près"), "statut")
+		H.eq(#VisiblePins(a), 0, "aucun doublon sur la minicarte d'Aekiss")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("proximité : une vue lointaine ne dégrade pas une position précise", function()
+		local world, a = Grouped()
+		a:Slash("near on")
+		local herb = SoftObject("Pacifique", true)
+		a:SetSoftTarget(herb)
+		world:Advance(0.1)
+		local tracked = LocalMarker(a, "Pacifique")
+		H.eq(tracked.accuracy, 5, "vue à portée d'interaction")
+		local x0, y0 = tracked.x, tracked.y
+		-- le joueur s'éloigne de 12 m, cible autre chose, puis de nouveau la plante, hors de portée
+		a.x = a.x + 12 / MAP.width
+		a:SetSoftTarget(SoftObject("Coffre solide"))
+		world:Advance(0.6)
+		herb.inReach = false
+		a:SetSoftTarget(herb)
+		world:Advance(0.6)
+		tracked = LocalMarker(a, "Pacifique")
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1, "même plante")
+		H.near(a.ns.MarkerManager.DistanceYards(ELWYNN, x0, y0, tracked.x, tracked.y), 0, 0.01, "position gardée")
+		H.eq(tracked.accuracy, 5)
+		NoErrors(a)
+	end)
+
+	H.test("proximité sans pistage : Aedot partage un filon vu de près", function()
+		local world, a, b = Grouped()
+		b:Slash("near on")
+		b:SetSoftTarget(SoftObject("Filon de cuivre", true))
+		world:Advance(0.1)
+		local list = Received(a, "Filon de cuivre")
+		H.eq(#list, 1, "filon reçu par Aekiss")
+		H.eq(list[1].marker.kind, "ORE")
+		H.eq(list[1].marker.accuracy, 5)
+		H.eq(b.ns.AutoDetect.stats.near, 1)
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("ciblage doux du jeu inactif : rien n'est lu ; /pgr near off rétablit les réglages d'origine", function()
+		local world, a, b = Grouped()
+		a:SetSoftTarget(SoftObject("Pacifique"))
+		world:Advance(1)
+		H.eq(#Received(b, "Pacifique"), 0, "ciblage doux inactif dans le jeu : aucune cible")
+		a:Slash("near on")
+		world:Advance(0.6)
+		H.eq(#Received(b, "Pacifique"), 1, "cible lue dès l'activation")
+		H.eq(a.env.PartyGatherRadarDB.proximityCVars.SoftTargetInteract, "1", "valeur d'origine gardée")
+		a.cvars.SoftTargetInteractArc = "1" -- changé par le joueur entre-temps
+		a:Slash("near off")
+		H.eq(a.cvars.SoftTargetInteract, "1", "rétabli")
+		H.eq(a.cvars.SoftTargetInteractOnlyInRange, "1", "rétabli")
+		H.eq(a.cvars.SoftTargetInteractRange, "10", "rétabli")
+		H.eq(a.cvars.SoftTargetInteractArc, "1", "réglage changé par le joueur : laissé")
+		H.eq(a.env.PartyGatherRadarDB.proximityCVars, nil)
+		H.ok(a:ChatContains("détection de proximité arrêtée"), "message d'arrêt")
+		NoErrors(a)
+	end)
+
+	H.test("en combat : réglages posés après le combat ; portée plus grande gardée ; /reload sans réécriture", function()
+		local world, a = Grouped()
+		a.cvars.SoftTargetInteractRange = "60"
+		a.inCombat = true
+		a:Slash("near on")
+		H.eq(a.cvars.SoftTargetInteract, "1", "rien n'est changé en combat")
+		H.ok(a:ChatContains("en combat : les réglages du jeu seront changés à la fin du combat"), "message")
+		world:Advance(1)
+		H.eq(a.cvars.SoftTargetInteract, "1", "toujours en combat")
+		a.inCombat = false
+		world:Advance(0.6)
+		H.eq(a.cvars.SoftTargetInteract, "3", "posés après le combat")
+		H.eq(a.cvars.SoftTargetInteractRange, "60", "portée jamais réduite")
+		local writes = a.cvarWrites
+		a:Reload()
+		world:Advance(1)
+		H.eq(a.cvarWrites, writes, "/reload : rien à réécrire")
+		H.eq(a.ns.Config.Get("proximityDetect"), true, "réglage conservé")
+		a:Slash("near off")
+		H.eq(a.cvars.SoftTargetInteract, "1", "rétabli après /reload")
+		H.eq(a.cvars.SoftTargetInteractRange, "60", "portée d'origine intacte")
+		NoErrors(a)
+	end)
+
+	H.test("cible douce sans ressource (PNJ, coffre, nom secret) ou en combat : rien n'est partagé", function()
+		local world, a, b = Grouped()
+		a:Slash("near on")
+		a:SetSoftTarget(SoftObject("Pacifique", false, "Creature"))
+		world:Advance(0.6)
+		a:SetSoftTarget(SoftObject("Coffre solide"))
+		world:Advance(0.6)
+		local secret = SoftObject("Pacifique")
+		secret.secret = true
+		a:SetSoftTarget(secret)
+		world:Advance(0.6)
+		H.ok(LogContains(a, "objet ciblé sans nom lisible"), "nom illisible journalisé")
+		a.inCombat = true
+		a:SetSoftTarget(SoftObject("Feuillargent"))
+		world:Advance(0.6)
+		H.eq(CountSent(a, "N"), 0, "rien partagé")
+		a.inCombat = false
+		world:Advance(0.6)
+		H.eq(#Received(b, "Feuillargent"), 1, "lue après le combat")
+		H.eq(#Received(b, "Pacifique"), 0)
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("emplacements connus : herbe reçue mémorisée chez Aedot, affichée après expiration et après /reload", function()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		local herb = Herb("Pacifique", 40, 30)
+		a.worldBlips = { herb }
+		HoverThenLeave(world, a, herb)
+		H.eq(b.ns.KnownSpots.Count(ELWYNN), 1, "emplacement mémorisé chez Aedot")
+		local pins = VisiblePins(b)
+		H.eq(#pins, 1, "la détection seule est affichée")
+		H.ok(pins[1].marker ~= nil, "pas d'emplacement superposé à la détection")
+		world:Advance(310)
+		H.eq(#Received(b, "Pacifique"), 0, "détection expirée")
+		pins = VisiblePins(b)
+		H.eq(#pins, 1, "emplacement connu affiché sans nouveau survol")
+		H.ok(pins[1].spot ~= nil and pins[1].status == "HISTORY", "marqueur discret")
+		local spot = pins[1].spot
+		local distance = b.ns.MarkerManager.DistanceYards(ELWYNN, spot.x, spot.y, herb.x, herb.y)
+		H.ok(distance <= 15, string.format("emplacement à %.1f m de la plante", distance))
+		pins[1].scripts.OnEnter(pins[1])
+		H.ok(TooltipHas(b, "Pacifique") and TooltipHas(b, "Emplacement connu"), "infobulle : nom et état")
+		H.ok(TooltipHas(b, "Présence actuelle non confirmée"), "présence jamais affirmée")
+		b:Reload()
+		world:Advance(3)
+		H.eq(#VisiblePins(b), 1, "gardé d'une session à l'autre")
+		-- Aekiss piste les herbes : ses points natifs suffisent, l'emplacement n'est pas dessiné par-dessus
+		H.eq(a.ns.KnownSpots.Count(ELWYNN), 1)
+		H.eq(#VisiblePins(a), 0, "aucune icône sur la minicarte de qui piste ce type")
+		-- nouvelle détection : elle remplace l'emplacement à l'affichage
+		HoverThenLeave(world, a, herb)
+		pins = VisiblePins(b)
+		H.eq(#pins, 1)
+		H.ok(pins[1].marker ~= nil and pins[1].status == "ACTIVE", "détection récente affichée à la place")
+		H.eq(b.ns.KnownSpots.Count(ELWYNN), 1, "même emplacement")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("récolte : emplacement mémorisé à la position du joueur, même sans pistage ; réception coupée", function()
+		local world, a, b = Grouped()
+		local x, y = At(60, 0)
+		SendLive(a, "n1", x, y)
+		world:Advance(310)
+		H.eq(#VisiblePins(b), 1, "emplacement reçu affiché")
+		b:Slash("receive off")
+		world:Advance(1.1)
+		H.eq(#VisiblePins(b), 0, "réception coupée : emplacement seulement reçu masqué")
+		b:FireEvent("UNIT_SPELLCAST_SENT", "player", "Feuillargent", "Cast-1", 2366)
+		b:FireEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", 2366)
+		world:Advance(1.1)
+		H.eq(b.ns.KnownSpots.Count(ELWYNN), 2, "cueillette mémorisée")
+		H.eq(#VisiblePins(b), 0, "la plante vient d'être cueillie : pas d'icône à sa place")
+		H.ok(LogContains(b, "emplacement de récolte : Feuillargent"), "journalisé")
+		world:Advance(300)
+		local pins = VisiblePins(b)
+		H.eq(#pins, 1, "5 min plus tard : son propre emplacement est affiché")
+		H.eq(pins[1].spot.n, "Feuillargent")
+		H.eq(pins[1].spot.a, 5, "à portée de la plante : ±5 m")
+		NoErrors(b)
+	end)
+
+	H.test("emplacement d'une herbe cueillie par un autre membre : masqué 5 min, puis affiché ; revue : affiché", function()
+		local world, a, b = Grouped()
+		local x, y = At(40, 0)
+		SendLive(a, "n1", x, y)
+		world:Advance(1)
+		H.eq(#Received(b, "Pacifique"), 1, "détection reçue")
+		a.ns.Sender.SendRemove("n1", "GATHERED")
+		world:Advance(1.1)
+		H.eq(#Received(b, "Pacifique"), 0, "retirée")
+		H.eq(b.ns.KnownSpots.Count(ELWYNN), 1, "emplacement gardé")
+		H.eq(#VisiblePins(b), 0, "pas d'icône juste après la cueillette")
+		b:Reload()
+		world:Advance(3)
+		H.eq(#VisiblePins(b), 0, "toujours masqué après /reload")
+		world:Advance(300)
+		H.eq(#VisiblePins(b), 1, "affiché 5 min plus tard")
+		-- revue avant la fin du délai : la marque est levée
+		local spot
+		b.ns.KnownSpots.ForEachOnMap(ELWYNN, function(s) spot = s end)
+		b.ns.KnownSpots.MarkGathered("HERB", ELWYNN, x, y, 5)
+		world:Advance(1.1)
+		H.eq(#VisiblePins(b), 0, "de nouveau cueillie")
+		H.eq(select(2, b.ns.KnownSpots.Record("ORE", "Filon de cuivre", ELWYNN, x, y, 5, false)), "created",
+			"un filon au même endroit n'est pas concerné")
+		b.ns.KnownSpots.Record("HERB", "Pacifique", ELWYNN, x, y, 5, false)
+		H.eq(spot.g, nil, "revue : marque levée")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("emplacements : fusion, position la plus précise, bornes, /pgr spots, /pgr clear les garde", function()
+		local world, a = Grouped()
+		local KS = a.ns.KnownSpots
+		local x1, y1 = At(0, 0)
+		local x2, y2 = At(8, 0)
+		local x3, y3 = At(3, 0)
+		local x4, y4 = At(30, 0)
+		KS.Record("HERB", "Pacifique", ELWYNN, x1, y1, 12, true)
+		local spot, action = KS.Record("HERB", "Feuillargent", ELWYNN, x2, y2, 5, false)
+		H.eq(action, "updated", "même type à 8 m : même emplacement")
+		H.eq(KS.Count(ELWYNN), 1)
+		H.eq(spot.c, 2, "vu deux fois")
+		H.eq(spot.n, "Feuillargent", "dernier nom vu")
+		H.eq(spot.a, 5, "position la plus précise gardée")
+		H.near(spot.x, x2, 1e-9)
+		KS.Record("HERB", "Pacifique", ELWYNN, x3, y3, 15, false)
+		H.near(spot.x, x2, 1e-9, "moins précis : position inchangée")
+		H.eq(select(2, KS.Record("ORE", "Filon de cuivre", ELWYNN, x2, y2, 5, true)), "created", "autre type")
+		H.eq(select(2, KS.Record("HERB", "Pacifique", ELWYNN, x4, y4, 12, true)), "created", "à 30 m : autre emplacement")
+		H.eq(KS.Count(ELWYNN), 3)
+		H.eq(KS.Record("TEST", "x", ELWYNN, 0.5, 0.5), nil, "type TEST refusé")
+		H.eq(KS.Record("HERB", "x", ELWYNN, 2, 0.5), nil, "coordonnée hors carte refusée")
+		H.eq(KS.Record("HERB", "x", 999999, 0.5, 0.5), nil, "carte sans dimensions refusée")
+		-- borne par carte : le moins récemment vu part
+		KS.MAX_PER_MAP = 5
+		for i = 1, 10 do
+			local x, y = At(100 + i * 40, 0)
+			KS.Record("HERB", "Pacifique", ELWYNN, x, y, 12, true, 1900000000 + i)
+		end
+		H.eq(KS.Count(ELWYNN), 5, "borne par carte")
+		local oldest
+		KS.ForEachOnMap(ELWYNN, function(s)
+			oldest = math.min(oldest or s.t, s.t)
+		end)
+		H.eq(oldest, 1900000006, "les plus récents gardés")
+		KS.MAX_PER_MAP = 300
+		a:Slash("spots")
+		H.ok(a:ChatContains("emplacements connus : 5 sur cette carte, 5 en tout"), "/pgr spots")
+		a:Slash("clear")
+		H.eq(KS.Count(), 5, "/pgr clear garde les emplacements connus")
+		a:Slash("spots clear")
+		H.eq(KS.Count(), 0)
+		H.ok(a:ChatContains("5 emplacement%(s%) connu%(s%) effacé%(s%)"), "/pgr spots clear")
+		NoErrors(a)
+	end)
+
+	H.test("emplacements : deux vues imprécises d'un même objet fusionnées jusqu'à 30 m, précises jamais", function()
+		local world, a = Grouped()
+		local KS = a.ns.KnownSpots
+		-- deux vues imprécises d'un même objet, de deux côtés opposés : même emplacement ; précises : deux
+		local west, westY = At(-200, 0)
+		local east, eastY = At(-172, 0)
+		KS.Record("HERB", "Pacifique", ELWYNN, west, westY, 15, false)
+		H.eq(select(2, KS.Record("HERB", "Pacifique", ELWYNN, east, eastY, 15, false)), "updated", "±15 m à 28 m : fusion")
+		local far, farY = At(-140, 0)
+		H.eq(select(2, KS.Record("HERB", "Pacifique", ELWYNN, far, farY, 15, false)), "created", "au-delà de 30 m : jamais")
+		local vague, vagueY = At(-104, 0)
+		H.eq(select(2, KS.Record("HERB", "Pacifique", ELWYNN, vague, vagueY, 40, false)), "created",
+			"très imprécise à 36 m : jamais fusionnée (30 m au plus)")
+		local near1, near1Y = At(-300, 0)
+		local near2, near2Y = At(-280, 0)
+		KS.Record("HERB", "Pacifique", ELWYNN, near1, near1Y, 5, false)
+		H.eq(select(2, KS.Record("HERB", "Pacifique", ELWYNN, near2, near2Y, 5, false)), "created", "±5 m à 20 m : deux")
+		H.eq(KS.Count(ELWYNN), 5)
+		NoErrors(a)
+	end)
+
+	H.test("emplacements modifiés à la main dans les SavedVariables : invalides retirés, sans erreur", function()
+		local world = H.NewWorld(root)
+		local c = world:NewClient({ name = "Aedot" })
+		c.savedVariables = { knownSpots = {
+			[ELWYNN] = {
+				{ x = 0.5, y = 0.5, k = "HERB", n = "Pacifique", a = 12, t = 1800000000, c = 2, m = true },
+				{ x = 2, y = 0.5, k = "HERB", t = 1 },
+				{ x = 0.4, y = 0.4, k = "TEST", t = 1 },
+				"texte",
+				{ x = 0.6, y = 0.6, k = "ORE", t = 1800000000, a = -3, c = "beaucoup", n = 42, m = "oui", g = "hier" },
+			},
+			[-5] = { { x = 0.5, y = 0.5, k = "HERB", t = 1 } },
+			Elwynn = {},
+			[1436] = "pas une liste",
+		} }
+		c:Login(false)
+		local KS = c.ns.KnownSpots
+		H.eq(KS.Count(), 2, "deux emplacements valides")
+		local ore
+		KS.ForEachOnMap(ELWYNN, function(spot)
+			if spot.k == "ORE" then
+				ore = spot
+			end
+		end)
+		H.eq(ore.a, 15, "précision invalide remplacée")
+		H.eq(ore.c, 1, "nombre de vues invalide remplacé")
+		H.eq(ore.n, nil, "nom invalide retiré")
+		H.eq(ore.m, nil, "drapeau invalide retiré")
+		H.eq(ore.g, nil, "date de récolte invalide retirée")
+		local stored = c.env.PartyGatherRadarDB.knownSpots
+		H.eq(stored[-5], nil)
+		H.eq(stored.Elwynn, nil)
+		H.eq(stored[1436], nil)
+		world:Advance(1.1)
+		NoErrors(c)
+	end)
+
+	H.test("/pgr near off en combat puis /reload avant la fin du combat : réglages rétablis ensuite", function()
+		local world, a = Grouped()
+		a:Slash("near on")
+		H.eq(a.cvars.SoftTargetInteract, "3")
+		a.inCombat = true
+		a:Slash("near off")
+		H.eq(a.cvars.SoftTargetInteract, "3", "rien n'est changé en combat")
+		a:Reload()
+		world:Advance(1)
+		H.eq(a.cvars.SoftTargetInteract, "3", "toujours en combat après /reload")
+		a.inCombat = false
+		world:Advance(0.6)
+		H.eq(a.cvars.SoftTargetInteract, "1", "rétabli après le combat, malgré le /reload")
+		H.eq(a.cvars.SoftTargetInteractArc, "0")
+		H.eq(a.cvars.SoftTargetInteractOnlyInRange, "1")
+		H.eq(a.cvars.SoftTargetInteractRange, "10")
+		H.eq(a.env.PartyGatherRadarDB.proximityCVars, nil, "valeurs d'origine oubliées une fois rétablies")
+		-- réglage coupé : la cible douce n'est pas lue, même activée par le joueur dans le jeu
+		a.cvars.SoftTargetInteract = "3"
+		a:SetSoftTarget(SoftObject("Pacifique"))
+		world:Advance(1)
+		H.eq(CountSent(a, "N"), 0, "réglage coupé : rien n'est lu")
+		NoErrors(a)
+	end)
+
+	H.test("proximité : même objet vu de deux côtés opposés : une ressource, un marqueur, un emplacement", function()
+		local world, a, b = Grouped()
+		a:Slash("near on")
+		local x0, y0 = a.x, a.y
+		local object = SoftObject("Pacifique")
+		a:SetSoftTarget(object)
+		world:Advance(0.1)
+		-- l'objet est à 14 m à l'est du départ : le joueur passe à 14 m de l'autre côté
+		a.x = x0 + 28 / MAP.width
+		world:Advance(6)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1, "même GUID : une seule ressource")
+		local tracked = LocalMarker(a, "Pacifique")
+		local middleX = x0 + 14 / MAP.width
+		H.near(a.ns.MarkerManager.DistanceYards(ELWYNN, tracked.x, tracked.y, middleX, y0), 0, 0.5,
+			"position entre les deux vues")
+		world:Advance(25)
+		H.eq(#Received(b, "Pacifique"), 1, "un seul marqueur chez Aedot")
+		H.eq(a.ns.KnownSpots.Count(ELWYNN), 1, "un seul emplacement chez Aekiss")
+		H.eq(b.ns.KnownSpots.Count(ELWYNN), 1, "un seul emplacement chez Aedot")
+		-- un autre objet du même nom, tout près : jamais fusionné avec le premier
+		a:SetSoftTarget(SoftObject("Pacifique"))
+		world:Advance(0.6)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 2, "autre GUID : autre ressource")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("proximité : vue à portée après une vue lointaine : position remplacée, précision exacte", function()
+		local world, a, b = Grouped()
+		a:Slash("near on")
+		local x0 = a.x
+		local object = SoftObject("Pacifique")
+		a:SetSoftTarget(object)
+		world:Advance(0.1)
+		H.eq(LocalMarker(a, "Pacifique").accuracy, 15)
+		-- le joueur marche 13 m jusqu'à la plante
+		a.x = x0 + 13 / MAP.width
+		object.inReach = true
+		world:Advance(0.6)
+		local tracked = LocalMarker(a, "Pacifique")
+		H.eq(tracked.accuracy, 5, "à portée : ±5 m")
+		H.near(a.ns.MarkerManager.DistanceYards(ELWYNN, tracked.x, tracked.y, a.x, a.y), 0, 0.01,
+			"position du joueur à portée, pas une moyenne avec la vue lointaine")
+		H.ok(LogContains(a, "proximité : Pacifique ciblé à environ 13 m"), "distance de ciblage journalisée")
+		world:Advance(3)
+		local list = Received(b, "Pacifique")
+		H.eq(#list, 1)
+		H.eq(list[1].marker.accuracy, 5, "précision reçue")
+		H.ok(b.ns.MarkerManager.DistanceYards(ELWYNN, list[1].marker.x, list[1].marker.y, a.x, a.y) < 0.5,
+			"position affinée reçue")
+		local spot
+		a.ns.KnownSpots.ForEachOnMap(ELWYNN, function(s) spot = s end)
+		H.eq(spot.a, 5, "emplacement : ±5 m")
+		H.near(a.ns.MarkerManager.DistanceYards(ELWYNN, spot.x, spot.y, a.x, a.y), 0, 0.01)
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("proximité : herbe cueillie encore ciblée le temps de disparaître : pas renvoyée, reste masquée", function()
+		local world, a, b = Grouped()
+		a:Slash("near on")
+		local object = SoftObject("Pacifique", true)
+		a:SetSoftTarget(object)
+		world:Advance(3)
+		H.eq(#Received(b, "Pacifique"), 1, "vue de près, partagée")
+		local sent = CountSent(a, "N")
+		-- cueillette réussie ; la cible douce désigne encore la plante (en jeu : 0,3 s après)
+		a:FireEvent("UNIT_SPELLCAST_SENT", "player", "Pacifique", "Cast-1", 2366)
+		a:FireEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", 2366)
+		world:Advance(6)
+		H.eq(CountSent(a, "N"), sent, "plante cueillie : pas de nouvelle annonce")
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 0, "plus suivie")
+		H.eq(#Received(b, "Pacifique"), 0, "retirée chez Aedot")
+		H.ok(LogContains(a, "proximité : Pacifique ignorée, cueillie à l'instant"), "journalisé")
+		local spot
+		a.ns.KnownSpots.ForEachOnMap(ELWYNN, function(s) spot = s end)
+		H.ok(spot and spot.g ~= nil, "emplacement toujours marqué cueilli")
+		H.eq(#VisiblePins(b), 0, "rien chez Aedot : ni marqueur ni emplacement")
+		-- autre objet du même nom, tout près : une autre plante, signalée
+		a:SetSoftTarget(SoftObject("Pacifique", true))
+		world:Advance(0.6)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1, "autre GUID : signalée")
+		-- la plante cueillie reste là (butin laissé) : signalée de nouveau après 60 s
+		a:SetSoftTarget(object)
+		world:Advance(50)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 1, "avant 60 s : toujours ignorée")
+		world:Advance(10)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 2, "après 60 s : signalée")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("proximité : herbe trouvée au survol puis cueillie : même nom à portée ignoré, autre nom signalé", function()
+		local world, a, b = Grouped()
+		a.probeRestricted = true
+		a:Slash("near on")
+		local herb = Herb("Pacifique", 3, 0)
+		a.worldBlips = { herb }
+		HoverThenLeave(world, a, herb)
+		H.eq(#Received(b, "Pacifique"), 1, "trouvée au survol, sans GUID")
+		a.worldBlips = {}
+		a:FireEvent("UNIT_SPELLCAST_SENT", "player", "Pacifique", "Cast-1", 2366)
+		a:FireEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", 2366)
+		world:Advance(0.3)
+		H.eq(#Received(b, "Pacifique"), 0, "retirée chez Aedot")
+		-- la cible douce désigne la plante cueillie : même nom, à l'endroit de la cueillette
+		a:SetSoftTarget(SoftObject("Pacifique", true))
+		world:Advance(3)
+		H.eq(a.ns.AutoDetect.GetNodeCount(), 0, "même nom à portée : ignorée")
+		H.eq(#Received(b, "Pacifique"), 0)
+		-- une autre plante à portée : signalée
+		a:SetSoftTarget(SoftObject("Feuillargent", true))
+		world:Advance(3)
+		H.eq(#Received(b, "Feuillargent"), 1, "autre nom : signalée")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("détection reçue masquée par un réglage : l'emplacement connu voisin reste affiché", function()
+		local world, a, b = Grouped()
+		local x, y = At(40, 0)
+		SendLive(a, "n1", x, y)
+		world:Advance(1.1)
+		local pins = VisiblePins(b)
+		H.eq(#pins, 1)
+		H.ok(pins[1].marker ~= nil, "détection affichée, pas l'emplacement")
+		b.ns.Config.Set("showLive", false)
+		world:Advance(1.1)
+		pins = VisiblePins(b)
+		H.eq(#pins, 1, "détections masquées : l'emplacement connu est affiché")
+		H.ok(pins[1].spot ~= nil and pins[1].status == "HISTORY")
+		NoErrors(b)
+	end)
+
+	H.test("emplacements : bornes sur toutes les cartes ; ceux reçus du groupe partent avant les siens", function()
+		local world, a = Grouped()
+		local KS = a.ns.KnownSpots
+		local WESTFALL = 1436
+		KS.MAX_TOTAL = 6
+		for i = 1, 3 do
+			local x, y = At(i * 40, 0)
+			KS.Record("HERB", "Pacifique", ELWYNN, x, y, 5, true, 1900000000 + i)
+		end
+		for i = 1, 6 do
+			KS.Record("HERB", "Pacifique", WESTFALL, 0.1 + i * 0.05, 0.5, 5, false, 1900000100 + i)
+		end
+		H.eq(KS.Count(), 6, "borne totale")
+		H.eq(KS.Count(ELWYNN), 3, "ses propres emplacements gardés, même plus anciens")
+		H.eq(KS.Count(WESTFALL), 3, "les plus anciens reçus retirés")
+		-- borne par carte : le plus ancien reçu part, pas le sien plus ancien
+		KS.MAX_TOTAL, KS.MAX_PER_MAP = 3000, 4
+		local x, y = At(400, 0)
+		KS.Record("HERB", "Pacifique", ELWYNN, x, y, 5, false, 1900000200)
+		x, y = At(440, 0)
+		KS.Record("HERB", "Pacifique", ELWYNN, x, y, 5, false, 1900000300)
+		H.eq(KS.Count(ELWYNN), 4)
+		local own, oldestReceived = 0, nil
+		KS.ForEachOnMap(ELWYNN, function(s)
+			if s.m then
+				own = own + 1
+			else
+				oldestReceived = math.min(oldestReceived or s.t, s.t)
+			end
+		end)
+		H.eq(own, 3, "aucun des siens retiré")
+		H.eq(oldestReceived, 1900000300, "le reçu le plus ancien est parti")
+		-- carte vidée par la borne totale puis de nouveau remplie
+		KS.MAX_PER_MAP = 300
+		KS.Clear()
+		KS.MAX_TOTAL = 1
+		KS.Record("HERB", "Pacifique", WESTFALL, 0.2, 0.5, 5, true, 1900000400)
+		KS.Record("HERB", "Pacifique", WESTFALL, 0.6, 0.5, 5, true, 1900000500)
+		H.eq(KS.Count(WESTFALL), 1, "liste retirée puis recréée")
+		H.eq(KS.Count(), 1)
+		KS.MAX_TOTAL = 3000
+		NoErrors(a)
+	end)
+
+	H.test("boucle d'affichage : arrêtée sans rien d'affichable sur la carte, relancée par le pistage", function()
+		local world, a = Grouped()
+		local KS = a.ns.KnownSpots
+		local x, y = At(40, 0)
+		KS.Record("HERB", "Pacifique", ELWYNN, x, y, 5, true)
+		world:Advance(1.1)
+		H.eq(a.ns.MinimapOverlay.IsUpdating(), false, "pistage des herbes actif : rien à suivre")
+		a.tracking = { H.ORE_TRACKING }
+		a:FireEvent("MINIMAP_UPDATE_TRACKING")
+		world:Advance(1.1)
+		H.eq(a.ns.MinimapOverlay.IsUpdating(), true, "pistage des herbes coupé : emplacement suivi")
+		H.eq(#VisiblePins(a), 1, "emplacement affiché")
+		KS.Clear()
+		KS.Record("HERB", "Pacifique", 1436, 0.5, 0.5, 5, true)
+		world:Advance(1.1)
+		H.eq(a.ns.MinimapOverlay.IsUpdating(), false, "emplacements d'une autre carte seulement : boucle arrêtée")
+		H.eq(#VisiblePins(a), 0)
+		NoErrors(a)
+	end)
+
+	---------------------------------------------------------------------------
+	H.suite("Discussion : « Aucun joueur nommé » causé par un autre addon")
+	---------------------------------------------------------------------------
+	-- Un autre addon (ForeverGuide 1.39.5 en jeu) chuchote un membre du groupe sous la forme « Prénom-Nom » : le
+	-- serveur répond qu'il n'existe pas. PartyGatherRadar masque ce message faux, et lui seul.
+
+	local function NotFound(client, name)
+		return string.format(client.env.ERR_CHAT_PLAYER_NOT_FOUND_S, name)
+	end
+
+	H.test("masqué quand il vise un membre du groupe connecté ; gardé sinon ; /pgr quiet off", function()
+		local world, a, b = RegionalGrouped()
+		H.eq(a:SystemMessage(NotFound(a, "Aedot-Wnx")), false, "« Prénom-Nom » d'un membre connecté : masqué")
+		H.eq(a:SystemMessage(NotFound(a, "Aedot")), false, "prénom seul : masqué")
+		H.eq(a:SystemMessage(NotFound(a, "aedot-wnx")), false, "casse différente : masqué")
+		H.eq(a:SystemMessage(NotFound(a, "Inconnu-Ailleurs")), true, "joueur hors du groupe : affiché")
+		H.eq(a:SystemMessage("Aedot-Wnx est absent."), true, "autre message système : affiché")
+		H.ok(a:ChatContains("Inconnu%-Ailleurs"), "message gardé dans la discussion")
+		H.eq(a.ns.Diagnostics.counters.hiddenNotFound, 3, "masquages comptés")
+		H.ok(LogContains(a, "masqué : Aedot-Wnx est dans le groupe et connecté"), "journalisé")
+		b.offline = true
+		H.eq(a:SystemMessage(NotFound(a, "Aedot-Wnx")), true, "membre déconnecté : affiché")
+		b.offline = false
+		a:Slash("quiet off")
+		H.eq(a.ns.Config.Get("hideNotFound"), false)
+		H.eq(a:SystemMessage(NotFound(a, "Aedot-Wnx")), true, "réglage coupé : affiché")
+		a:Slash("quiet on")
+		H.eq(a:SystemMessage(NotFound(a, "Aedot-Wnx")), false, "réglage rétabli")
+		a:Slash("off")
+		H.eq(a:SystemMessage(NotFound(a, "Aedot-Wnx")), true, "addon désactivé : affiché")
+		a:Slash("on")
+		a:Reload()
+		world:Advance(3)
+		H.eq(a:SystemMessage(NotFound(a, "Aedot-Wnx")), false, "après /reload : un seul filtre, toujours actif")
+		NoErrors(a)
+	end)
+
+	H.test("client anglais et royaumes classiques : « Nom-Royaume » d'un membre masqué ; hors groupe affiché", function()
+		local world, a, b = NewPair(nil, { name = "Aedot", locale = "enUS" })
+		world:SetGroup({ a, b })
+		world:Advance(3)
+		H.eq(b:SystemMessage(NotFound(b, "Aekiss-Autre")), false, "membre connecté : masqué")
+		H.eq(b:SystemMessage("No player named 'Aekiss' is currently playing."), false, "format anglais reconnu")
+		world:SetGroup({})
+		world:Advance(3)
+		H.eq(b:SystemMessage(NotFound(b, "Aekiss")), true, "plus dans le groupe : affiché")
+		NoErrors(b)
+	end)
+
+	H.test("motif du message : caractères spéciaux, %1$s, format absent ou secret", function()
+		local _, a = NewPair()
+		local Build = a.ns.ChatFilter.BuildPattern
+		local plain = Build("No player named '%s' is currently playing.")
+		H.eq(("No player named 'Aedot-Wnx' is currently playing."):match(plain), "Aedot-Wnx")
+		H.eq(("No player named 'Aedot' is currently playingX"):match(plain), nil, "le point n'est pas un joker")
+		local numbered = Build("[%1$s] (introuvable) 100% ?")
+		H.eq(("[Aedot] (introuvable) 100% ?"):match(numbered), "Aedot", "%1$s et caractères magiques")
+		H.eq(Build("aucun nom"), nil, "sans %s : rien")
+		H.eq(Build(nil), nil)
+		H.eq(Build(H.SECRET), nil, "format secret : rien")
+		NoErrors(a)
 	end)
 end
