@@ -49,6 +49,8 @@ local function PrintStatus()
 	local mapID = ns.Coordinates.GetPlayerMapPosition()
 	ns.Print(ns.T("STATUS_SPOTS", mapID and ns.KnownSpots.Count(mapID) or 0, ns.KnownSpots.Count(),
 		YesNo(ns.Config.Get("showHistory"))))
+	ns.Print(ns.T("STATUS_SPAWNS", ns.T("SPAWNS_STATE_" .. ns.SpawnPoints.GetState():upper()),
+		mapID and ns.SpawnPoints.Count(mapID) or 0, YesNo(ns.Config.Get("showSpawns"))))
 	ns.Diagnostics.PrintCapabilities()
 end
 
@@ -244,7 +246,8 @@ end
 ---------------------------------------------------------------------------
 
 local TOGGLES = { share = "shareEnabled", receive = "receiveEnabled", minimap = "showMinimap",
-	button = "showMinimapButton", auto = "autoDetect", near = "proximityDetect", quiet = "hideNotFound" }
+	button = "showMinimapButton", auto = "autoDetect", near = "proximityDetect", quiet = "hideNotFound",
+	spawns = "showSpawns" }
 
 local function SetToggle(key, argument)
 	local value

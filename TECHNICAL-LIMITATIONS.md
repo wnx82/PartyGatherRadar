@@ -1,6 +1,6 @@
 # PartyGatherRadar — Faisabilité et limitations techniques
 
-Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-11-09 pour la version 0.5.0.
+Document de la **phase 0** (recherche et diagnostic), mis à jour le 2026-11-09 pour la version 0.6.0.
 
 Légende des niveaux de confiance :
 
@@ -24,6 +24,14 @@ Légende des niveaux de confiance :
 > **Sans souris (0.5.0).** Lire la minicarte sans survol reste impossible. La 0.5.0 ajoute deux sources
 > légitimes : la cible d'interaction douce du jeu (détection de proximité, environ 15 m) et les
 > emplacements connus (herbes et filons déjà vus, gardés d'une session à l'autre). Voir § 3.A.
+>
+> **Restriction voulue (0.6.0).** Sur Stanzilla/WoWUIBugs#894 (2026-11-07), il a été répondu au nom de
+> Blizzard : « This is intentional and an unwanted interaction. The API will be removed entirely in a
+> future update », puis « Blizzard told us. Minimap is off limits. » La portée de la cible douce est
+> plafonnée à environ 15 m quels que soient les réglages (mesuré par NodeRadar, `SoftTargetInteractRange`
+> 60 : 15,4 à 15,6 m ; Constaté (tiers)). Déplacer la minicarte sous le curseur immobile permet encore de
+> la lire (NodeRadar, 2026-11-08) : écarté, car c'est contourner une restriction que Blizzard dit voulue.
+> La 0.6.0 ajoute les points d'apparition de QuestieDB. Voir § 3.A.
 
 ## 1. Client ciblé
 
@@ -47,6 +55,7 @@ PartyGatherRadar identifie Forever par le numéro d'interface (16000 à 19999) e
 | **A. Lire le nom d'un point sous un survol** | Possible | `C_TooltipInfo.GetMinimapMouseover()` (données de l'infobulle native) ; sous le vrai curseur : **détection au survol** (0.4.0) | Confirmé (doc) ; **vérifié en jeu** par le balayage (2026-10-15) ; **survol vérifié en jeu** (2026-11-08, build 70862 : lecture et réception par le groupe) |
 | **A. Sonder la minicarte sans bouger la souris** | **Bloqué depuis novembre 2026** | `Minimap:SetUsingSoftCursor(bool)` + `Minimap:UpdateMouseoverAtPoint(x, y)` : fonctions **propres à la branche Forever** | Confirmé (doc) ; **vérifié en jeu** (2026-10-15, 293 points sans erreur ; plantes partagées dans le journal du client live) ; depuis la mise à jour de novembre 2026, ne nomme plus qu'un point sous le vrai curseur (Constaté (tiers)) |
 | **A. Détecter une ressource proche sans souris** | Possible, portée limitée | Cible d'interaction douce du jeu (unité `softinteract`, `PLAYER_SOFT_INTERACT_CHANGED`) : GUID « GameObject-… », `UnitName`, `UnitIsInInteractRange` ; réglages `SoftTargetInteract*` posés par l'addon (0.5.0, opt-in) | **Vérifié en jeu** (2026-11-09) : herbes lues et partagées, premières vues à environ 4 à 13 m ; limite d'environ 15 m constatée par un tiers (ForeverLootSparkles) |
+| A. Endroits où une ressource peut pousser | Possible avec QuestieDB | Points d'apparition lus en jeu dans QuestieDB (`LibQuestieDB.Object.spawns`, table des zones `Support.Get("ZoneDB")`) (0.6.0) | Coordonnées comparées hors jeu aux emplacements vus en jeu ; affichage non vérifié en jeu |
 | A. Emplacements déjà vus | Possible | Positions gardées dans les SavedVariables, affichées comme positions historiques (0.5.0) | Testé hors jeu ; non vérifié en jeu |
 | A. Position d'un point détecté | Approximative | Grille de sondage → décalage en unités de minicarte → mètres (`C_Minimap.GetViewRadius`) → coordonnées de carte | Calcul testé hors jeu ; en jeu, joueurs retrouvés à 0,3 m et 8 m (près du centre) ; échelle à distance non vérifiée |
 | A. Identifiant de ressource | Indisponible | L'infobulle ne donne que des noms localisés | Confirmé (doc : données d'infobulle) |
@@ -188,6 +197,23 @@ détection au survol, choisi automatiquement (§ 3.A).
     suffisent), et, s'ils viennent d'un autre joueur, quand la réception est coupée ;
   - la boucle d'affichage (10 Hz) ne tourne que s'il existe des marqueurs, ou des emplacements connus
     affichables sur la carte courante ;
+- **Points d'apparition (0.6.0, réglage `showSpawns`, désactivé par défaut ; QuestieDB n'est pas lu tant
+  qu'il est désactivé)** :
+  - source : QuestieDB (GPL-3), s'il est installé, par son interface publique `_G.LibQuestieDB` (contrat 4) ;
+    rien n'est copié dans l'addon. `## OptionalDeps: QuestieDB` le charge avant l'addon ;
+  - liste fixe d'identifiants d'objets de récolte (herbes et filons, variantes de Forever comprises), établie
+    le 2026-11-09 sur QuestieDB 1.0.13 : un nom seul ne suffit pas, des objets de quête portent un nom de
+    ressource ;
+  - zones de QuestieDB rapportées aux cartes du jeu par sa table `areaIdToUiMapId` (et ses alias) ; une
+    zone absente n'est pas affichée ; la sentinelle d'instance (-1, -1) est ignorée ;
+  - lecture par carte à l'arrivée, 8 objets par image, jamais en combat ; 4 cartes gardées ; un objet en
+    erreur n'empêche pas les autres ; deux objets au même endroit (au centième de pourcent) font un point ;
+  - affichés plus petits et plus pâles qu'un emplacement connu (infobulle « Point d'apparition possible »,
+    « présence actuelle non confirmée »), cachés près d'une détection ou d'un emplacement connu de la même
+    sorte (20 m, récolte récente comprise) et pour une sorte que le personnage piste ;
+  - précision : comparés hors jeu le 2026-11-09 aux emplacements vus en jeu par Aedot, 0,1 à 0,3 % de carte
+    (5 à 15 m) pour les relevés précis. QuestieDB décrit quatre zones redessinées entre Era et Forever
+    (Mulgore, Maleterres de l'Est, Les Carmines, Hurlevent) sans convertir ses lectures : non vérifié ;
   - une ressource peut avoir été récoltée par un autre joueur ou ne pas être réapparue : un emplacement
     connu n'est jamais présenté comme une détection.
 
@@ -245,7 +271,7 @@ détection au survol, choisi automatiquement (§ 3.A).
 - Les icônes peuvent recouvrir des points natifs (quêtes) : taille 14 px et transparence 0,9 par défaut,
   réglables.
 
-## 4. Limitations connues de la version 0.5.0
+## 4. Limitations connues de la version 0.6.0
 
 1. Sur le client live restreint (novembre 2026), seule la **détection au survol** fonctionne : une
    ressource n'est partagée que si le joueur passe la souris dessus sur sa minicarte. Elle n'est pas
@@ -253,8 +279,8 @@ détection au survol, choisi automatiquement (§ 3.A).
    n'est pas retiré (il peut souvent être miné plusieurs fois). Aucune détection sans survol n'est
    possible sur ce client : aucune API ne donne les points de la minicarte, et la sonde ne lit plus que
    sous le vrai curseur. Sans souris, la 0.5.0 offre seulement la détection de proximité (objet le plus
-   proche ; vérifiée en jeu le 2026-11-09 : plantes vues à environ 4 à 13 m) et les emplacements connus
-   (présence non confirmée). Le passage automatique en mode survol est vérifié en jeu (2026-11-08) ; la
+   proche ; vérifiée en jeu le 2026-11-09 : plantes vues à environ 4 à 13 m), les emplacements connus
+   et, avec QuestieDB, les points d'apparition (0.6.0) ; ni les uns ni les autres n'affirment la présence. Le passage automatique en mode survol est vérifié en jeu (2026-11-08) ; la
    précision sous le curseur, l'icône chez l'autre client et le retour au balayage ne le sont pas encore.
    Détection par balayage (clients non restreints) : coût en images par seconde et effet sur
    l'infobulle native non mesurés.

@@ -78,6 +78,7 @@ local function BuildOptions()
 		{ key = "showHerbs", label = ns.T("OPT_HERBS") },
 		{ key = "showOres", label = ns.T("OPT_ORES") },
 		{ key = "showHistory", label = ns.T("OPT_KNOWN_SPOTS") },
+		{ key = "showSpawns", label = ns.T("OPT_SPAWNS") },
 		{ key = "showOwnDetections", label = ns.T("OPT_SHOW_OWN") },
 		{ key = "showMinimapButton", label = ns.T("OPT_BUTTON") },
 		{ key = "hideNotFound", label = ns.T("OPT_HIDE_NOT_FOUND") },

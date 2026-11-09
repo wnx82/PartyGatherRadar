@@ -61,10 +61,10 @@ return function(H, root)
 		H.eq(#peersA, 1)
 		H.eq(peersA[1].name, "Aedot-Realm")
 		H.eq(peersA[1].peer.compatible, true)
-		H.eq(peersA[1].peer.addonVersion, "0.5.0")
+		H.eq(peersA[1].peer.addonVersion, "0.6.0")
 		H.eq(#peersB, 1)
 		H.eq(peersB[1].name, "Aekiss-Realm")
-		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.5.0"), "annonce de découverte")
+		H.ok(a:ChatContains("Aedot utilise PartyGatherRadar 0.6.0"), "annonce de découverte")
 		H.eq(peersA[1].peer.messages, #b.sent, "un message compté une seule fois")
 		H.ok(#a.sent <= 2 and #b.sent <= 2, "au plus un HELLO et une réponse par client")
 		local before = #a.sent + #b.sent
@@ -828,7 +828,7 @@ return function(H, root)
 		local _, a = Grouped()
 		local button = a.ns.MinimapButton.GetFrame()
 		button.scripts.OnEnter(button)
-		H.eq(a.tooltipLines[1], "PartyGatherRadar 0.5.0")
+		H.eq(a.tooltipLines[1], "PartyGatherRadar 0.6.0")
 		H.eq(a.tooltipLines[2], "groupe : 1 autre(s) membre(s), 1 avec PartyGatherRadar")
 		NoErrors(a)
 	end)
@@ -847,10 +847,10 @@ return function(H, root)
 		a:Slash("")
 		H.eq(a.ns.SettingsPanel.IsOpen(), true, "fenêtre ouverte")
 		local version, summary = a.ns.SettingsPanel.GetHeaderTexts()
-		H.eq(version, "version 0.5.0, protocole 1 — client 1.60.1 (build 70374)")
+		H.eq(version, "version 0.6.0, protocole 1 — client 1.60.1 (build 70374)")
 		H.eq(summary, "2 autre(s) membre(s), 1 avec PartyGatherRadar")
 		local texts = a.ns.SettingsPanel.GetMemberTexts()
-		H.ok(Contains(texts, "Aedot Wnx — |cff40ff40PartyGatherRadar 0.5.0|r"), "membre avec l'addon")
+		H.ok(Contains(texts, "Aedot Wnx — |cff40ff40PartyGatherRadar 0.6.0|r"), "membre avec l'addon")
 		H.ok(Contains(texts, "Carl Zed — |cff9d9d9dsans addon détecté|r"), "membre sans l'addon")
 		world:SetGroup({ a })
 		world:Advance(1)
@@ -2279,5 +2279,265 @@ return function(H, root)
 		H.eq(Build(nil), nil)
 		H.eq(Build(H.SECRET), nil, "format secret : rien")
 		NoErrors(a)
+	end)
+
+	---------------------------------------------------------------------------
+	H.suite("Points d'apparition (0.6.0) : QuestieDB, sans survol ni détection")
+	---------------------------------------------------------------------------
+	-- QuestieDB simulé (H.FakeQuestieDB) : zone 12 = Elwynn. Aekiss piste les herbes, Aedot ne piste rien.
+
+	--- Position en pourcents de QuestieDB à `east`, `north` mètres de (0,5 ; 0,5).
+	local function Pct(east, north)
+		local x, y = At(east, north)
+		return { x * 100, y * 100 }
+	end
+
+	local function SpawnDB(extra)
+		local spec = {
+			spawns = {
+				[1618] = { [12] = { Pct(40, 0), Pct(-1500, 0) }, [14] = { { 50, 50 } } }, -- Peacebloom (Durotar : 14)
+				[1731] = { [12] = { Pct(-40, 0) } },                 -- Copper Vein
+				[1732] = { [12] = { Pct(-40, 0) } },                 -- Tin Vein, mêmes points que le cuivre
+				[1617] = { [12] = { { -1, -1 }, Pct(0, -40) } },     -- Silverleaf : sentinelle d'instance ignorée
+				[999999] = { [12] = { Pct(0, 40) } },                -- objet de quête, hors de la liste
+			},
+			names = { [1618] = "Pacifique", [1731] = "Filon de cuivre", [1732] = "Filon d'étain", [1617] = "Feuillargent" },
+		}
+		for key, value in pairs(extra or {}) do
+			spec[key] = value
+		end
+		return H.FakeQuestieDB(spec)
+	end
+
+	--- Deux clients groupés, points d'apparition activés (ils sont désactivés par défaut).
+	local function SpawnPair(dbA, dbB)
+		local world, a, b = Grouped({ name = "Aekiss", tracking = { H.HERB_TRACKING, H.ORE_TRACKING }, questieDB = dbA },
+			{ name = "Aedot", questieDB = dbB })
+		a.ns.Config.Set("showSpawns", true)
+		b.ns.Config.Set("showSpawns", true)
+		return world, a, b
+	end
+
+	local function SpawnPins(client)
+		local list = {}
+		for _, pin in ipairs(VisiblePins(client)) do
+			if pin.spawn then
+				list[#list + 1] = pin
+			end
+		end
+		return list
+	end
+
+	local function PinNamed(client, kind)
+		for _, pin in ipairs(SpawnPins(client)) do
+			if pin.spawn.k == kind then
+				return pin
+			end
+		end
+		return nil
+	end
+
+	H.test("points d'apparition : sans QuestieDB, rien d'affiché et le statut le dit", function()
+		local world, _, b = SpawnPair(nil, nil)
+		world:Advance(2)
+		H.eq(#VisiblePins(b), 0)
+		H.eq(b.ns.SpawnPoints.IsAvailable(), false)
+		b:Slash("status")
+		H.ok(b:ChatContains("points d'apparition %(QuestieDB%) : QuestieDB absent"), "statut")
+		NoErrors(b)
+	end)
+
+	H.test("points d'apparition : désactivés par défaut, QuestieDB jamais lu avant /pgr spawns on", function()
+		local db = SpawnDB()
+		local world, _, b = Grouped(nil, { name = "Aedot", questieDB = db })
+		world:Advance(2)
+		H.eq(b.ns.Config.Get("showSpawns"), false, "désactivés par défaut")
+		H.eq(#SpawnPins(b), 0, "aucune icône pâle de point d'apparition")
+		H.eq(next(db.calls), nil, "QuestieDB jamais lu")
+		H.eq(b.ns.MinimapOverlay.IsUpdating(), false, "rien à suivre : pas de boucle d'affichage")
+		b:Slash("status")
+		H.ok(b:ChatContains("points d'apparition %(QuestieDB%) : disponibles, 0 sur cette carte ; affichés : non"),
+			"statut")
+		b:Slash("spawns on")
+		world:Advance(2)
+		H.eq(#SpawnPins(b), 3, "activés à la demande")
+		NoErrors(b)
+	end)
+
+	H.test("points d'apparition : herbes et filons de QuestieDB autour d'Aedot, sans survol ni détection", function()
+		local db = SpawnDB()
+		local world, a, b = SpawnPair(SpawnDB(), db)
+		world:Advance(2)
+		H.eq(b.ns.SpawnPoints.Count(ELWYNN), 4, "Elwynn : 2 Pacifique, 1 filon (cuivre et étain), 1 Feuillargent")
+		local pins = SpawnPins(b)
+		H.eq(#pins, 3, "les 3 points proches ; celui à 1500 m est hors de la minicarte")
+		H.eq(#VisiblePins(b), 3, "rien d'autre")
+		H.eq(db.calls[999999], nil, "objet absent de la liste : jamais lu")
+		H.eq(db.calls[1618], 1, "chaque objet lu une fois pour la carte")
+		local ore = PinNamed(b, "ORE")
+		H.ok(ore ~= nil and ore.status == "SPAWN", "marqueur de point d'apparition")
+		H.eq(#ore.spawn.ids, 2, "cuivre et étain au même endroit : un seul point")
+		ore.scripts.OnEnter(ore)
+		H.ok(TooltipHas(b, "Filon de cuivre / Filon d'étain"), "infobulle : les deux noms")
+		H.ok(TooltipHas(b, "Point d'apparition possible"), "infobulle : état")
+		H.ok(TooltipHas(b, "Présence actuelle non confirmée"), "présence jamais affirmée")
+		local hx, hy = At(40, 0)
+		local nearest
+		for _, pin in ipairs(pins) do
+			local distance = b.ns.MarkerManager.DistanceYards(ELWYNN, pin.spawn.x, pin.spawn.y, hx, hy)
+			nearest = math.min(nearest or distance, distance)
+		end
+		H.ok(nearest < 0.5, string.format("position reprise telle quelle (écart %.2f m)", nearest))
+		-- Aekiss piste les herbes : ses points natifs suffisent, seuls les filons s'affichent chez lui
+		local pinsA = SpawnPins(a)
+		H.eq(#pinsA, 1, "Aekiss : le filon seulement")
+		H.eq(pinsA[1].spawn.k, "ORE")
+		b:Slash("status")
+		H.ok(b:ChatContains("points d'apparition %(QuestieDB%) : disponibles, 4 sur cette carte ; affichés : oui"),
+			"statut")
+		H.ok(LogContains(b, "carte 1429 : 4 point(s) d'apparition (QuestieDB)"), "journalisé")
+		-- en marchant : le point lointain entre dans la minicarte sans autre événement (boucle d'affichage suivie)
+		b.x, b.y = At(-1450, 0)
+		world:Advance(0.3)
+		local farSeen = false
+		for _, pin in ipairs(SpawnPins(b)) do
+			farSeen = farSeen or pin.spawn.x < 0.2
+		end
+		H.ok(farSeen, "point lointain affiché en approchant")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("points d'apparition : masqués près d'une détection, puis près de l'emplacement tout juste cueilli", function()
+		local world, a, b = SpawnPair(nil, SpawnDB())
+		world:Advance(2)
+		H.ok(PinNamed(b, "HERB") ~= nil, "Pacifique possible à 40 m")
+		local x, y = At(40, 2)
+		SendLive(a, "n1", x, y)
+		world:Advance(1.1)
+		local pins = VisiblePins(b)
+		local live, herbSpawns = 0, 0
+		for _, pin in ipairs(pins) do
+			if pin.marker then
+				live = live + 1
+			elseif pin.spawn and pin.spawn.k == "HERB" then
+				herbSpawns = herbSpawns + 1
+			end
+		end
+		H.eq(live, 1, "la détection est affichée")
+		H.eq(herbSpawns, 1, "le point d'apparition voisin est masqué ; l'autre Feuillargent reste")
+		a.ns.Sender.SendRemove("n1", "GATHERED")
+		world:Advance(1.1)
+		H.eq(#Received(b, "Pacifique"), 0, "cueillie")
+		for _, pin in ipairs(SpawnPins(b)) do
+			H.ok(not (pin.spawn.k == "HERB" and pin.spawn.x > 0.5), "pas de point d'apparition là où elle vient d'être cueillie")
+		end
+		world:Advance(300)
+		local spots = 0
+		for _, pin in ipairs(VisiblePins(b)) do
+			if pin.spot then
+				spots = spots + 1
+			end
+			H.ok(not (pin.spawn and pin.spawn.k == "HERB" and pin.spawn.x > 0.5), "l'emplacement connu le remplace")
+		end
+		H.eq(spots, 1, "5 min plus tard : l'emplacement connu est affiché")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("points d'apparition : masqués près d'une détection, même sans emplacement connu", function()
+		local world, a, b = SpawnPair(nil, SpawnDB())
+		world:Advance(2)
+		local x, y = At(40, 2)
+		SendLive(a, "n1", x, y)
+		world:Advance(1.1)
+		b.ns.KnownSpots.Clear() -- la détection seule doit suffire à masquer le point voisin
+		world:Advance(1.1)
+		H.eq(#Received(b, "Pacifique"), 1, "détection toujours affichée")
+		H.eq(b.ns.KnownSpots.Count(ELWYNN), 0, "aucun emplacement connu")
+		for _, pin in ipairs(SpawnPins(b)) do
+			H.ok(not (pin.spawn.k == "HERB" and pin.spawn.x > 0.5), "point d'apparition masqué par la détection")
+		end
+		H.eq(#SpawnPins(b), 2, "les deux autres points restent")
+		NoErrors(a)
+		NoErrors(b)
+	end)
+
+	H.test("points d'apparition : /pgr spawns off et on, filtre des types, jamais lus en combat", function()
+		local db = SpawnDB()
+		local world, _, b = NewPair(nil, { name = "Aedot", questieDB = db })
+		b.ns.Config.Set("showSpawns", true)
+		b.inCombat = true -- dès la connexion, avant la première image
+		world:Advance(3)
+		H.eq(next(db.calls), nil, "aucune lecture de QuestieDB en combat")
+		H.eq(#SpawnPins(b), 0)
+		b.inCombat = false
+		b:FireEvent("PLAYER_REGEN_ENABLED")
+		world:Advance(3)
+		H.eq(#SpawnPins(b), 3, "lus après le combat")
+		b:Slash("spawns off")
+		world:Advance(1.1)
+		H.eq(#SpawnPins(b), 0, "réglage coupé")
+		H.ok(b:ChatContains("réglage showSpawns : non"))
+		H.eq(b.ns.MinimapOverlay.IsUpdating(), false, "plus rien à suivre : la boucle d'affichage s'arrête")
+		b:Slash("spawns on")
+		world:Advance(1.1)
+		H.eq(#SpawnPins(b), 3, "réactivé")
+		b.ns.Config.Set("showHerbs", false)
+		world:Advance(1.1)
+		local pins = SpawnPins(b)
+		H.eq(#pins, 1, "herbes masquées : le filon reste")
+		H.eq(pins[1].spawn.k, "ORE")
+		NoErrors(b)
+	end)
+
+	H.test("points d'apparition : changement de carte, carte gardée en mémoire au retour", function()
+		local db = SpawnDB({ spawns = { [1618] = { [12] = { Pct(40, 0) }, [40] = { { 51, 50 } } } } })
+		local world, _, b = SpawnPair(nil, db)
+		world:Advance(2)
+		H.eq(#SpawnPins(b), 1, "Elwynn")
+		b.mapID = 1436
+		b:FireEvent("ZONE_CHANGED_NEW_AREA")
+		world:Advance(2)
+		H.eq(b.ns.SpawnPoints.Count(1436), 1, "Marche de l'Ouest lue à l'arrivée")
+		H.eq(#SpawnPins(b), 1)
+		H.eq(db.calls[1618], 2, "une lecture par carte")
+		b.mapID = ELWYNN
+		b:FireEvent("ZONE_CHANGED_NEW_AREA")
+		world:Advance(2)
+		H.eq(#SpawnPins(b), 1, "de retour à Elwynn")
+		H.eq(db.calls[1618], 2, "carte gardée : pas de nouvelle lecture")
+		NoErrors(b)
+	end)
+
+	H.test("points d'apparition : QuestieDB incompatible, sans table des zones, en erreur, zone retirée", function()
+		local world, _, b = SpawnPair(nil, SpawnDB({ contract = false }))
+		world:Advance(2)
+		H.eq(#SpawnPins(b), 0, "contrat refusé : rien")
+		b:Slash("status")
+		H.ok(b:ChatContains("version de QuestieDB non prise en charge"), "statut : contrat")
+		NoErrors(b)
+
+		world, _, b = SpawnPair(nil, SpawnDB({ zones = false }))
+		world:Advance(2)
+		H.eq(#SpawnPins(b), 0, "sans table des zones : rien")
+		b:Slash("status")
+		H.ok(b:ChatContains("table des zones de QuestieDB introuvable"), "statut : zones")
+		NoErrors(b)
+
+		world, _, b = SpawnPair(nil, SpawnDB({ failing = { [1618] = true } }))
+		world:Advance(2)
+		H.eq(#SpawnPins(b), 2, "un objet illisible : les autres s'affichent")
+		NoErrors(b)
+
+		world, _, b = SpawnPair(nil, SpawnDB({ areaOverride = "return { [12] = 0 }" }))
+		world:Advance(2)
+		H.eq(#SpawnPins(b), 0, "zone retirée par la table de QuestieDB")
+		NoErrors(b)
+
+		world, _, b = SpawnPair(nil, SpawnDB({ areaTable = "return { [12] = 1429" }))
+		world:Advance(2)
+		H.eq(#SpawnPins(b), 0, "table des zones illisible : rien")
+		NoErrors(b)
 	end)
 end

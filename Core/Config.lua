@@ -36,6 +36,8 @@ Config.DEFAULTS = {
 	showOres = true,
 	showLive = true,
 	showHistory = true,         -- positions historiques, dont les emplacements connus (présence non confirmée)
+	showSpawns = false,         -- points d'apparition lus dans QuestieDB s'il est installé (présence non confirmée ;
+	                            -- désactivés par défaut : seules les plantes signalées s'affichent)
 
 	-- Apparence
 	iconSize = 14,

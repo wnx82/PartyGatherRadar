@@ -266,6 +266,8 @@ function World:NewClient(opts)
 	client.inCombat = false
 	-- types de pistage connus du personnage (C_Minimap.GetTrackingInfo)
 	client.tracking = opts.tracking or {}
+	-- QuestieDB simulé (_G.LibQuestieDB, voir H.FakeQuestieDB) ; nil : addon absent
+	client.questieDB = opts.questieDB
 	self.clients[#self.clients + 1] = client
 	return client
 end
@@ -456,6 +458,8 @@ local function BuildEnvironment(client)
 		api[name] = _G[name]
 	end
 	api.unpack = unpack
+	api.loadstring = loadstring
+	api.LibQuestieDB = client.questieDB
 	api.print = function(...)
 		local parts = {}
 		for i = 1, select("#", ...) do
@@ -855,6 +859,57 @@ function Client:UnexpectedGlobals()
 end
 
 H.ALLOWED_GLOBALS = ALLOWED_GLOBALS
+
+local function CopyTree(value)
+	if type(value) ~= "table" then
+		return value
+	end
+	local copy = {}
+	for key, item in pairs(value) do
+		copy[key] = CopyTree(item)
+	end
+	return copy
+end
+
+--- QuestieDB simulé : la partie de son interface publique (LibQuestieDB, contrat 4) que lit Map/SpawnPoints.lua.
+--- spec.spawns : [objectID] = { [areaId] = { { x, y } (pourcents), ... } } ; spec.names : [objectID] = nom ;
+--- spec.areaTable / spec.areaOverride : texte « return { [areaId] = uiMapID } » (zones par défaut : 12 = Elwynn,
+--- 14 = Durotar, 40 = Marche de l'Ouest) ; spec.contract = false : contrat refusé ; spec.zones = false : pas de
+--- table des zones ; spec.failing[objectID] = true : lecture en erreur. lib.calls[objectID] : lectures par objet.
+function H.FakeQuestieDB(spec)
+	spec = spec or {}
+	local calls = {}
+	return {
+		contractVersion = 4,
+		calls = calls,
+		RequireContract = function(required)
+			return spec.contract ~= false and required <= 4
+		end,
+		Object = {
+			spawns = function(id)
+				calls[id] = (calls[id] or 0) + 1
+				if spec.failing and spec.failing[id] then
+					error("QuestieDB simulé : lecture impossible")
+				end
+				return CopyTree(spec.spawns and spec.spawns[id]) -- un arbre neuf à chaque lecture, comme QuestieDB
+			end,
+			name = function(id)
+				return spec.names and spec.names[id] or nil
+			end,
+		},
+		Support = {
+			Get = function(name)
+				if name ~= "ZoneDB" or spec.zones == false then
+					return nil
+				end
+				return { private = {
+					areaIdToUiMapId = spec.areaTable or "return { [12] = 1429, [14] = 1411, [40] = 1436 }",
+					areaIdToUiMapIdOverride = spec.areaOverride,
+				} }
+			end,
+		},
+	}
+end
 
 --- Types de pistage simulés.
 H.HERB_TRACKING = { name = "Découverte d'herbes", active = true, spellID = 2383, type = "spell" }

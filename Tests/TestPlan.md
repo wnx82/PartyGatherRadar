@@ -1,4 +1,4 @@
-# Plan de tests — PartyGatherRadar 0.5.0
+# Plan de tests — PartyGatherRadar 0.6.0
 
 Deux niveaux de tests :
 
@@ -55,6 +55,7 @@ powershell -ExecutionPolicy Bypass -File Tools\run-tests.ps1
 | 2026-11-08 | Lua 5.1 embarqué (lupa) | 139 réussis, 0 échec (0.4.0) |
 | 2026-11-08 | Lua 5.1 embarqué (lupa) | 142 réussis, 0 échec (0.4.1) |
 | 2026-11-09 | Lua 5.1 embarqué (lupa) | 165 réussis, 0 échec (0.5.0) |
+| 2026-11-09 | Lua 5.1 embarqué (lupa) | 173 réussis, 0 échec (0.6.0) |
 
 ## 2. Tests en jeu
 
@@ -218,6 +219,25 @@ emplacements déjà vus. Les deux joueurs installent la 0.5.0 et activent `/pgr 
 | Aekiss (pistage des herbes actif) au même endroit | Pas d'icône d'emplacement connu pour les herbes (points natifs) | Non exécuté |
 | Aedot groupé avec un joueur qui utilise ForeverGuide | Plus de « Aucun joueur nommé '<membre>' » dans la discussion ; `/pgr quiet off` les fait revenir ; `/pgr diag` : compteur `hiddenNotFound` | Non exécuté |
 | Un joueur sans pistage actif cueille ou mine, puis `/pgr spots` | Un emplacement de plus ; journal : « emplacement de récolte : … » ; pas d'icône à cet endroit pendant 5 min | Non exécuté |
+
+### Scénario 13 — Points d'apparition de QuestieDB (0.6.0)
+
+Contexte : Questie (et donc QuestieDB) est installé chez Aedot. Aedot ne piste rien ; Aekiss piste les
+herbes. Les deux installent la 0.6.0 et activent `/pgr debug`.
+
+| Étape | Résultat attendu | Statut |
+|---|---|---|
+| Aedot : `/pgr status` avant tout réglage | « … affichés : non » (désactivés par défaut) ; aucune icône pâle de point d'apparition | Non exécuté |
+| Aedot : `/pgr spawns on`, puis `/pgr status` hors combat | « points d'apparition (QuestieDB) : disponibles, N sur cette carte ; affichés : oui » ; journal : « carte … : N point(s) d'apparition (QuestieDB) » | Non exécuté |
+| Aedot regarde sa minicarte (Elwynn, Loch Modan ou Bois de la Pénombre) | Petites icônes pâles là où poussent herbes et filons, sans survol ni détection | Non exécuté |
+| Aedot survole une icône | Nom (en français si QuestieDB le fournit), « Point d'apparition possible », distance, « présence actuelle non confirmée » | Non exécuté |
+| Aedot marche jusqu'à une icône | Une plante ou un filon est souvent là ; sinon déjà cueilli ou pas encore repoussé (à rapporter : écart en mètres) | Non exécuté |
+| Aekiss (pistage des herbes) | Pas d'icône de point d'apparition pour les herbes, seulement pour les filons | Non exécuté |
+| Aekiss partage une herbe (survol ou proximité) | Chez Aedot, l'icône verte remplace le point d'apparition voisin | Non exécuté |
+| Aedot : `/pgr spawns off`, puis `on` | Icônes masquées, puis réaffichées | Non exécuté |
+| Mulgore, Maleterres de l'Est, Les Carmines ou Hurlevent | Icônes sur les vraies ressources (QuestieDB décrit ces zones comme redessinées) : à rapporter | Non exécuté |
+| Changement de zone, combat, `/reload` | Pas de saccade visible ; pas d'erreur Lua (`/pgr diag`) | Non exécuté |
+| Sans Questie | `/pgr status` : « QuestieDB absent » ; rien d'autre ne change | Non exécuté |
 
 ### Scénarios complémentaires
 

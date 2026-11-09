@@ -3,7 +3,7 @@
 Addon pour **World of Warcraft: Forever** (1.60.1, interface 16001) : partager en temps réel,
 entre membres d'un groupe, les ressources de récolte (herbes, minerais) détectées sur la minicarte.
 
-> **État : prototype 0.5.0.** Détection des herbes et minerais de la minicarte et partage au groupe
+> **État : prototype 0.6.0.** Détection des herbes et minerais de la minicarte et partage au groupe
 > (phases 2 et 3, expérimental), bouton de minicarte et fenêtre de réglages. Le tout est testé hors jeu
 > (simulation de plusieurs clients). **Vérifié en jeu** (2026-10-15, deux clients) : chargement, sondes
 > d'API, identité, communication de groupe, lecture des plantes par le balayage ; le journal du client
@@ -23,6 +23,12 @@ entre membres d'un groupe, les ressources de récolte (herbes, minerais) détect
 > cible d'interaction douce du jeu et partage l'herbe ou le filon le plus proche (environ 15 m), même sans
 > pistage ; et les **emplacements connus**, les herbes et filons déjà vus, gardés d'une session à
 > l'autre et affichés en icônes discrètes (présence non confirmée). **Pas encore vérifié en jeu.**
+>
+> **Points d'apparition (0.6.0)** : Blizzard a confirmé que la restriction de la minicarte est voulue
+> (« Minimap is off limits »). Avec **QuestieDB** installé (il vient avec Questie), la minicarte montre,
+> sans survol ni détection, les endroits où chaque herbe et chaque filon peut pousser (`/pgr spawns on`,
+> désactivé par défaut ; présence non confirmée). Coordonnées comparées hors jeu aux emplacements vus en
+> jeu (5 à 15 m d'écart). **Affichage pas encore vérifié en jeu.**
 
 ## Objectif
 
@@ -48,7 +54,7 @@ externe, aucune automatisation de déplacement, d'interaction ou de récolte, au
 artificiellement chez un joueur qui ne le possède pas. Aucune position n'est inventée : sans donnée
 fiable, rien n'est affiché.
 
-## Fonctionnalités de la version 0.5.0
+## Fonctionnalités de la version 0.6.0
 
 Réellement implémenté :
 
@@ -80,6 +86,11 @@ Réellement implémenté :
   (fusion à 15 m, 3000 au plus), affichés en icônes discrètes avec l'avertissement « présence actuelle
   non confirmée » ; cachés près d'une détection récente, 5 min après une récolte et pour une sorte que le
   personnage piste ;
+- **points d'apparition** (0.6.0, `/pgr spawns on|off`, désactivés par défaut) : avec QuestieDB installé,
+  les endroits où herbes et filons peuvent pousser, lus en jeu dans ses données (rien n'est copié dans
+  l'addon), en icônes plus discrètes que les emplacements connus ; cachés près d'une détection ou d'un
+  emplacement connu (récolte récente comprise) et pour une sorte que le personnage piste ; lus carte par
+  carte, jamais en combat ;
 - **adaptation au client** : balayage aveugle repéré seul (avertissement unique, mode survol, essai toutes
   les 30 s, retour automatique), mémorisé par build du client ; échecs répétés de la sonde signalés ;
   aucun sondage pendant les restrictions d'addons (rencontre, mode défi, JcJ) ;
@@ -101,7 +112,7 @@ réglages avancés (taille, couleurs, durées) dans la fenêtre (phase 4).
 Chemin cible : `World of Warcraft\_forever_\Interface\AddOns\PartyGatherRadar\` (client live ; la bêta
 utilisait `_classic_beta_`)
 
-**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.5.0.zip` dans le dossier `AddOns` ; le ZIP
+**Depuis le ZIP** : extraire `dist\PartyGatherRadar-0.6.0.zip` dans le dossier `AddOns` ; le ZIP
 contient déjà le dossier `PartyGatherRadar\`. Vérifier que le chemin final est
 `AddOns\PartyGatherRadar\PartyGatherRadar.toc` (et non `AddOns\PartyGatherRadar\PartyGatherRadar\…`).
 
@@ -138,7 +149,7 @@ n'est nécessaire.
 ## Premier essai à deux
 
 1. Installer l'addon chez les deux joueurs, se grouper.
-2. Chacun voit « <autre> utilise PartyGatherRadar 0.5.0 ». Sinon : `/pgr status` et `/pgr diag`.
+2. Chacun voit « <autre> utilise PartyGatherRadar 0.6.0 ». Sinon : `/pgr status` et `/pgr diag`.
 3. Aekiss active Découverte d'herbes et s'approche de plantes : en quelques secondes, Aedot voit une
    icône verte à l'emplacement de chaque plante sur sa propre minicarte (survol : le nom de la plante
    en titre, « Détecté par : Aekiss »). Rien à taper : la détection est automatique.

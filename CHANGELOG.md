@@ -4,6 +4,56 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 [SemVer](https://semver.org/lang/fr/). La version figure dans `PartyGatherRadar.toc` et
 `PartyGatherRadar_Forever.toc` (`## Version`, fichiers identiques) et `Core/Init.lua` (`ns.VERSION`).
 
+## [0.6.0] - 2026-11-09
+
+### Contexte
+
+La restriction de la minicarte du build 70862 est voulue : sur le suivi de bugs de l'interface
+(Stanzilla/WoWUIBugs#894), il a été répondu, au nom de Blizzard, « This is intentional and an unwanted
+interaction. The API will be removed entirely in a future update » puis « Minimap is off limits ».
+La portée de la cible d'interaction douce reste plafonnée à environ 15 m, quels que soient les réglages.
+**Sur le client live, une herbe ou un filon n'est donc partagé que quand le joueur qui le voit passe la
+souris sur son icône de minicarte** (ou passe tout près, avec `/pgr near on`). Cette version peut en plus
+montrer, sur demande, où herbes et filons peuvent pousser.
+
+### Ajouté
+
+- Points d'apparition (réglage « Points d'apparition de QuestieDB », `/pgr spawns on|off`, **désactivé par
+  défaut** : sans lui, seules les plantes signalées par le groupe et les emplacements connus s'affichent) :
+  quand QuestieDB (installé avec Questie) est présent, l'addon lit dans ses données les endroits où chaque
+  herbe et chaque filon peut apparaître, et les montre sur la minicarte. QuestieDB n'est lu qu'une fois le
+  réglage activé.
+  - Rien de QuestieDB n'est copié dans l'addon : ses données sont lues en jeu par son interface publique
+    (`LibQuestieDB`, contrat 4). Sans QuestieDB, rien ne change ; `/pgr status` le signale.
+  - Liste fixe d'objets de récolte (identifiants du jeu), variantes de Forever comprises (« Wilted
+    Peacebloom », « Stunted Silverleaf », « Poor Copper Vein », « Chunk of Amber »...). Les objets de
+    quête qui portent un nom de ressource ne sont pas lus.
+  - Marqueur plus petit et plus pâle qu'un emplacement connu ; l'infobulle donne le nom (langue du client
+    si QuestieDB la fournit), l'état « point d'apparition possible » et la distance. La présence actuelle
+    n'est jamais affirmée.
+  - Masqué près d'une détection ou d'un emplacement connu du même type (moins de 20 m, emplacement tout
+    juste récolté compris), et pour un type que le personnage piste lui-même : ses points natifs suffisent.
+  - Deux objets au même endroit (filons de cuivre et d'étain qui partagent leurs points) font un seul
+    marqueur, avec les deux noms.
+  - Lecture par carte, à l'arrivée, quelques objets par image et jamais en combat ; les 4 dernières cartes
+    sont gardées en mémoire. Une erreur de QuestieDB sur un objet n'empêche pas les autres.
+- `/pgr status` : ligne « points d'apparition (QuestieDB) » (disponibles, lecture en cours, absent,
+  version non prise en charge), nombre sur la carte et réglage.
+- TOC : `## OptionalDeps: QuestieDB`, pour que QuestieDB soit chargé avant l'addon.
+
+### Vérifié hors jeu
+
+- Les coordonnées de QuestieDB 1.0.13 (Forever) ont été comparées aux emplacements vus en jeu par Aedot :
+  0,1 à 0,3 % de carte (environ 5 à 15 m) pour les relevés précis, au Bois de la Pénombre, au Loch Modan et
+  aux Steppes ardentes, avec le bon nom de ressource.
+- 173 tests hors jeu (8 nouveaux) ; les 17 mutations de la fonctionnalité sont détectées.
+
+### Non vérifié en jeu
+
+- L'affichage des points d'apparition sur le client live, la lecture de QuestieDB en jeu (noms traduits,
+  temps de lecture d'une carte), et les quatre zones que QuestieDB décrit comme redessinées entre Era et
+  Forever (Mulgore, Maleterres de l'Est, Les Carmines, Hurlevent). Voir `Tests/TestPlan.md`, scénario 13.
+
 ## [0.5.0] - 2026-11-09
 
 ### Contexte

@@ -12,6 +12,10 @@
 -- historique »), sauf près d'une détection du même type (moins de 20 m), pour un type que ce personnage piste
 -- (ses points natifs suffisent, et l'icône gênerait leur survol) et, réception désactivée, pour les
 -- emplacements seulement reçus du groupe.
+--
+-- Points d'apparition (Map/SpawnPoints.lua, données de QuestieDB) : marqueurs plus discrets encore, pour les mêmes
+-- types que les emplacements connus, sauf près d'une détection ou d'un emplacement connu du même type (moins de
+-- 20 m, emplacement tout juste récolté compris : la ressource vient de disparaître).
 
 local addonName, ns = ...
 
@@ -24,6 +28,7 @@ local UPDATE_INTERVAL = 0.1  -- 10 rafraîchissements par seconde au plus
 local FULL_REFRESH_INTERVAL = 1
 local EXPIRE_INTERVAL = 1
 local SPOT_HIDE_NEAR_LIVE_YARDS = 20 -- emplacement connu masqué près d'une détection du même type
+local SPAWN_HIDE_NEAR_SPOT_YARDS = 20 -- point d'apparition masqué près d'un emplacement connu du même type
 local MASK_TEXTURE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 
 local ICONS = {
@@ -35,6 +40,7 @@ local ICONS = {
 
 local STATUS_COLOR_KEY = {
 	ACTIVE = "live", UNCERTAIN = "uncertain", HISTORY = "history", MANUAL = "history", TEST = "test",
+	SPAWN = "history",
 }
 
 local pool = {}         -- cadres libres
@@ -46,10 +52,14 @@ local dirty = true
 local last = {}         -- dernier état de projection, pour éviter les recalculs inutiles
 
 -- contexte du passage courant (évite de créer une fermeture à chaque rafraîchissement)
-local ctx = { spotKinds = {} }
--- détections du passage courant, en mètres du joueur : { kind, east, north } (masquent les emplacements connus)
+local ctx = { spotKinds = {}, spawnKinds = {} }
+-- détections du passage courant, en mètres du joueur : { kind, east, north } (masquent les emplacements connus et
+-- les points d'apparition)
 local liveNear = {}
 local liveCount = 0
+-- emplacements connus voisins du passage courant, même forme (masquent les points d'apparition)
+local spotsNear = {}
+local spotsNearCount = 0
 
 ---------------------------------------------------------------------------
 -- Infobulle
@@ -110,9 +120,31 @@ local function ShowSpotTooltip(pin)
 	GameTooltip:Show()
 end
 
+local function ShowSpawnTooltip(pin)
+	local point = pin.spawn
+	GameTooltip:SetOwner(pin, "ANCHOR_RIGHT")
+	local name = ns.Config.Get("showTooltipName") and ns.SpawnPoints.GetName(point)
+	if name then
+		local color = ns.Config.Get("colors").history
+		GameTooltip:AddLine(name, color.r, color.g, color.b)
+	else
+		GameTooltip:AddLine(ns.T("TOOLTIP_TITLE"), 0.2, 1, 0.6)
+	end
+	TooltipLine("TT_KIND", ns.T("KIND_" .. point.k))
+	TooltipLine("TT_STATE", ns.T("STATUS_SPAWN"))
+	if pin.distance then
+		TooltipLine("TT_DISTANCE", ns.T("DISTANCE_FMT", floor(pin.distance + 0.5)))
+	end
+	GameTooltip:AddLine(ns.T("TT_SPAWN_WARNING"), 0.8, 0.8, 0.8, true)
+	GameTooltip:Show()
+end
+
 local function ShowTooltip(pin)
 	if pin.spot then
 		return ShowSpotTooltip(pin)
+	end
+	if pin.spawn then
+		return ShowSpawnTooltip(pin)
 	end
 	local marker, status = pin.marker, pin.status
 	if not marker then
@@ -214,7 +246,7 @@ local function ReleasePin(key)
 	HideTooltip(pin)
 	pin:Hide()
 	pin:ClearAllPoints()
-	pin.marker, pin.spot, pin.status, pin.distance, pin.styleKey = nil, nil, nil, nil, nil
+	pin.marker, pin.spot, pin.spawn, pin.status, pin.distance, pin.styleKey = nil, nil, nil, nil, nil, nil
 	pool[pin] = true
 end
 
@@ -235,13 +267,16 @@ local function ApplyStyle(pin, kind, status)
 	if status == "HISTORY" or status == "MANUAL" then
 		size = floor(size * 0.75 + 0.5) -- marqueur discret
 		alpha = alpha * 0.7
+	elseif status == "SPAWN" then
+		size = floor(size * 0.6 + 0.5) -- possible seulement : plus discret qu'un emplacement connu
+		alpha = alpha * 0.5
 	end
 	pin:SetSize(size, size)
 	pin:SetAlpha(alpha)
 	local color = ns.Config.Get("colors")[STATUS_COLOR_KEY[status]]
 	pin.ring:SetVertexColor(color.r, color.g, color.b, 1)
 	pin.icon:SetTexture(ICONS[kind] or ICONS.OTHER)
-	pin.icon:SetDesaturated(status == "UNCERTAIN" or status == "HISTORY")
+	pin.icon:SetDesaturated(status == "UNCERTAIN" or status == "HISTORY" or status == "SPAWN")
 end
 
 ---------------------------------------------------------------------------
@@ -339,10 +374,10 @@ local function PlaceMarker(marker, status)
 	end
 end
 
-local function NearLive(kind, east, north)
-	local limit = SPOT_HIDE_NEAR_LIVE_YARDS * SPOT_HIDE_NEAR_LIVE_YARDS
-	for i = 1, liveCount do
-		local entry = liveNear[i]
+local function IsNear(list, count, limitYards, kind, east, north)
+	local limit = limitYards * limitYards
+	for i = 1, count do
+		local entry = list[i]
 		local dx, dy = entry.east - east, entry.north - north
 		if entry.kind == kind and dx * dx + dy * dy <= limit then
 			return true
@@ -351,35 +386,80 @@ local function NearLive(kind, east, north)
 	return false
 end
 
+local function NearLive(kind, east, north)
+	return IsNear(liveNear, liveCount, SPOT_HIDE_NEAR_LIVE_YARDS, kind, east, north)
+end
+
+--- Emplacement connu voisin du joueur : masque les points d'apparition proches du même type.
+local function NoteSpot(kind, east, north)
+	spotsNearCount = spotsNearCount + 1
+	local entry = spotsNear[spotsNearCount]
+	if not entry then
+		entry = {}
+		spotsNear[spotsNearCount] = entry
+	end
+	entry.kind, entry.east, entry.north = kind, east, north
+end
+
 --- Emplacement connu de la carte courante (la table de l'emplacement sert de clé de cadre). Pas affiché juste
---- après une récolte : la ressource vient de disparaître.
+--- après une récolte : la ressource vient de disparaître. Retenu aussi, affiché ou non (réglage, récolte), pour
+--- masquer les points d'apparition voisins.
 local function PlaceSpot(spot)
-	if not ctx.spotKinds[spot.k] or (not spot.m and not ctx.receiveEnabled) then
+	local kind = spot.k
+	local shown, masksSpawns = ctx.spotKinds[kind], ctx.spawnKinds[kind]
+	if not (shown or masksSpawns) or (not spot.m and not ctx.receiveEnabled) then
+		return
+	end
+	local east, north = ns.Coordinates.OffsetYards(ctx.width, ctx.height, ctx.px, ctx.py, spot.x, spot.y)
+	local distance = sqrt(east * east + north * north)
+	if masksSpawns and distance <= ctx.radius * 1.5 + SPAWN_HIDE_NEAR_SPOT_YARDS then
+		NoteSpot(kind, east, north)
+	end
+	if not shown then
 		return
 	end
 	ctx.spotsFollowed = true -- affichable ici : suivi pendant les déplacements, même hors de vue ou récolté
 	if ns.KnownSpots.IsRecentlyGathered(spot, ctx.epoch) then
 		return
 	end
-	local east, north = ns.Coordinates.OffsetYards(ctx.width, ctx.height, ctx.px, ctx.py, spot.x, spot.y)
-	local distance = sqrt(east * east + north * north)
-	if distance > ctx.radius * 1.5 or NearLive(spot.k, east, north) then
+	if distance > ctx.radius * 1.5 or NearLive(kind, east, north) then
 		return
 	end
-	local pin = ShowPinAt(spot, east, north, distance, spot.k, "HISTORY")
+	local pin = ShowPinAt(spot, east, north, distance, kind, "HISTORY")
 	if pin then
 		pin.spot = spot
 	end
 end
 
+--- Point d'apparition de la carte courante (sa clé numérique sert de clé de cadre).
+local function PlaceSpawn(point)
+	local kind = point.k
+	if not ctx.spawnKinds[kind] then
+		return
+	end
+	ctx.spotsFollowed = true
+	local east, north = ns.Coordinates.OffsetYards(ctx.width, ctx.height, ctx.px, ctx.py, point.x, point.y)
+	local distance = sqrt(east * east + north * north)
+	if distance > ctx.radius * 1.5 or NearLive(kind, east, north)
+		or IsNear(spotsNear, spotsNearCount, SPAWN_HIDE_NEAR_SPOT_YARDS, kind, east, north) then
+		return
+	end
+	local pin = ShowPinAt(point.key, east, north, distance, kind, "SPAWN")
+	if pin then
+		pin.spawn = point
+	end
+end
+
 local herbsTracked, oresTracked, trackingReadAt = false, false, nil
 
---- Types dont les emplacements connus s'affichent : filtre d'affichage, et pas de pistage actif de ce type
---- (pistage relu au plus une fois par seconde).
+--- Types dont les emplacements connus et les points d'apparition s'affichent : filtre d'affichage, et pas de
+--- pistage actif de ce type (pistage relu au plus une fois par seconde).
 local function UpdateSpotKinds(now)
-	local kinds = ctx.spotKinds
-	kinds.HERB, kinds.ORE = false, false
-	if not (ns.Config.Get("showHistory") and ns.KnownSpots.Count(ctx.mapID) > 0) then
+	local spotKinds, spawnKinds = ctx.spotKinds, ctx.spawnKinds
+	spotKinds.HERB, spotKinds.ORE, spawnKinds.HERB, spawnKinds.ORE = false, false, false, false
+	local wantSpots = ns.Config.Get("showHistory") and ns.KnownSpots.Count(ctx.mapID) > 0
+	local wantSpawns = ns.Config.Get("showSpawns") and ns.SpawnPoints.IsAvailable()
+	if not (wantSpots or wantSpawns) then
 		return
 	end
 	if not trackingReadAt or now - trackingReadAt >= FULL_REFRESH_INTERVAL or now < trackingReadAt then
@@ -388,12 +468,19 @@ local function UpdateSpotKinds(now)
 		herbsTracked = tracking.available and tracking.herbs ~= nil and tracking.herbs.active or false
 		oresTracked = tracking.available and tracking.ores ~= nil and tracking.ores.active or false
 	end
-	kinds.HERB = ns.Config.Get("showHerbs") and not herbsTracked
-	kinds.ORE = ns.Config.Get("showOres") and not oresTracked
+	local herbs = ns.Config.Get("showHerbs") and not herbsTracked
+	local ores = ns.Config.Get("showOres") and not oresTracked
+	if wantSpots then
+		spotKinds.HERB, spotKinds.ORE = herbs, ores
+	end
+	if wantSpawns then
+		spawnKinds.HERB, spawnKinds.ORE = herbs, ores
+	end
 end
 
---- Rien n'est affiché (minicarte masquée, position inconnue) : aucun emplacement connu à suivre non plus.
---- ctx.spotsFollowed : un emplacement connu de la carte courante est affichable (la boucle continue).
+--- Rien n'est affiché (minicarte masquée, position inconnue) : aucun emplacement connu ni point d'apparition à
+--- suivre non plus. ctx.spotsFollowed : un emplacement connu ou un point d'apparition de la carte courante est
+--- affichable (la boucle continue).
 local function HideEverything()
 	HideAll()
 	ctx.spotsFollowed = false
@@ -425,16 +512,18 @@ local function Refresh(now)
 	end
 	local halfWidth, halfHeight = Minimap:GetWidth() / 2, Minimap:GetHeight() / 2
 	local version, spotsVersion = ns.MarkerManager.version, ns.KnownSpots.version
+	local spawnsVersion = ns.SpawnPoints.version
 
 	if not dirty and now - lastFullAt < FULL_REFRESH_INTERVAL and last.mapID == mapID and last.px == px
 		and last.py == py and last.radius == radius and last.facing == facing and last.halfWidth == halfWidth
-		and last.version == version and last.spotsVersion == spotsVersion then
+		and last.version == version and last.spotsVersion == spotsVersion and last.spawnsVersion == spawnsVersion then
 		return
 	end
 	dirty = false
 	lastFullAt = now
 	last.mapID, last.px, last.py, last.radius, last.facing = mapID, px, py, radius, facing
-	last.halfWidth, last.version, last.spotsVersion = halfWidth, version, spotsVersion
+	last.halfWidth, last.version, last.spotsVersion, last.spawnsVersion = halfWidth, version, spotsVersion,
+		spawnsVersion
 
 	ctx.mapID, ctx.px, ctx.py, ctx.width, ctx.height = mapID, px, py, width, height
 	ctx.radius, ctx.facing, ctx.halfWidth, ctx.halfHeight = radius, facing, halfWidth, halfHeight
@@ -444,12 +533,17 @@ local function Refresh(now)
 	ctx.epoch = ns.Epoch()
 
 	ns.Wipe(usedThisPass)
-	liveCount = 0
+	liveCount, spotsNearCount = 0, 0
 	ns.MarkerManager.ForEach(PlaceMarker, now)
 	UpdateSpotKinds(now)
 	ctx.spotsFollowed = false
-	if ctx.spotKinds.HERB or ctx.spotKinds.ORE then
+	local spawnsWanted = ctx.spawnKinds.HERB or ctx.spawnKinds.ORE
+	if ctx.spotKinds.HERB or ctx.spotKinds.ORE or spawnsWanted then
 		ns.KnownSpots.ForEachOnMap(mapID, PlaceSpot)
+	end
+	if spawnsWanted then
+		-- carte pas encore lue : sa construction démarre, PGR_SPAWNS_CHANGED relance l'affichage à la fin
+		ns.SpawnPoints.ForEachOnMap(mapID, PlaceSpawn)
 	end
 	for key in pairs(activePins) do
 		if not usedThisPass[key] then
@@ -523,6 +617,7 @@ end
 
 ns.On("PGR_MARKERS_CHANGED", "MinimapOverlay", OnChange)
 ns.On("PGR_SPOTS_CHANGED", "MinimapOverlay", OnChange)
+ns.On("PGR_SPAWNS_CHANGED", "MinimapOverlay", OnChange)
 ns.On("PGR_SETTING_CHANGED", "MinimapOverlay", OnChange)
 ns.On("PGR_CONFIG_LOADED", "MinimapOverlay", OnChange)
 ns.RegisterEvent("MINIMAP_UPDATE_ZOOM", "MinimapOverlay", OnChange)
